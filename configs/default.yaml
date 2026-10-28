@@ -1,0 +1,35 @@
+# Configuração padrão do rallycut.
+# Valores por modalidade (quadra/praia) sobrescrevem os de "geral".
+# Os valores de margem e limiar são provisórios: serão calibrados na Fase 1/2.
+
+geral:
+  proxy:
+    altura: 480          # altura do proxy de análise (px)
+    fps: 8               # fps do proxy de análise
+    usar_nvdec: true     # decodificar o bruto na GPU (cuda); cai para CPU se falhar
+  audio:
+    taxa_hz: 16000       # taxa de amostragem do áudio extraído (mono)
+  saida:
+    altura: 1080         # resolução de saída
+    fps: null            # null = manter o fps do bruto
+    codec: h264_nvenc
+    preset: p5           # p1 (rápido) .. p7 (melhor qualidade)
+    cq: 23               # qualidade constante (menor = melhor)
+    audio_codec: aac
+    audio_bitrate: 160k
+  janela:
+    tamanho_s: 0.5       # janela de features (s)
+
+quadra:
+  margem_pre_s: 2.0      # tempo mantido antes do saque (provisório)
+  margem_pos_s: 1.5      # tempo mantido após o fim do ponto (provisório)
+  duracao_min_rally_s: 3.0
+  uniao_gap_s: 2.0       # une trechos separados por menos que isso
+  peso_audio: 1.0
+
+praia:
+  margem_pre_s: 2.5
+  margem_pos_s: 1.5
+  duracao_min_rally_s: 3.0
+  uniao_gap_s: 2.0
+  peso_audio: 0.5        # áudio menos confiável (vento e ruído)
