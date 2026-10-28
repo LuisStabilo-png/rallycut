@@ -119,7 +119,7 @@ def detectar_cortes(z_vis: np.ndarray, fps: float, t_audio: np.ndarray,
         linhas.append({"tempo_s": t, "frame": int(k + 1), "z_visual": float(z_vis[k]),
                        "z_audio": z_a, "origem": "visual"})
     # Cortes que quase não mexem a imagem (jogadores parados) só aparecem no áudio.
-    if len(z_aud):
+    if len(z_aud) and cfg["audio_solo"] is not None:
         dist_a = max(1, int(cfg["distancia_min_s"] / 0.010))
         picos_a, _ = find_peaks(z_aud, height=cfg["audio_solo"], distance=dist_a)
         tempos_visuais = np.array([l["tempo_s"] for l in linhas])
@@ -134,6 +134,7 @@ def detectar_cortes(z_vis: np.ndarray, fps: float, t_audio: np.ndarray,
     tabela = pd.DataFrame(linhas, columns=["tempo_s", "frame", "z_visual", "z_audio", "origem"])
     tabela = tabela.sort_values("tempo_s").reset_index(drop=True)
     tabela["confianca"] = [classificar(r, cfg) for r in tabela.itertuples()]
+    tabela["aceito"] = tabela["confianca"] != "baixa"  # só estes dividem os trechos
     tabela.insert(0, "id", np.arange(1, len(tabela) + 1))
     return tabela
 
