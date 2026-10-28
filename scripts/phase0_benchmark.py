@@ -20,29 +20,9 @@ import time
 from pathlib import Path
 
 from rallycut.config import carregar_config
+from rallycut.media import cmd_audio, cmd_proxy, cmd_saida, sondar_video
 
 DURACAO_JOGO_REF_S = 2 * 3600
-
-
-def sondar_video(caminho: Path) -> dict:
-    """Lê duração, resolução, fps e codec do primeiro stream de vídeo."""
-    saida = subprocess.run(
-        ["ffprobe", "-v", "error", "-select_streams", "v:0",
-         "-show_entries", "stream=codec_name,width,height,r_frame_rate,pix_fmt:format=duration",
-         "-of", "json", str(caminho)],
-        capture_output=True, text=True, check=True,
-    ).stdout
-    dados = json.loads(saida)
-    stream = dados["streams"][0]
-    num, den = stream["r_frame_rate"].split("/")
-    return {
-        "codec": stream["codec_name"],
-        "largura": stream["width"],
-        "altura": stream["height"],
-        "fps": float(num) / float(den),
-        "pix_fmt": stream["pix_fmt"],
-        "duracao_s": float(dados["format"]["duration"]),
-    }
 
 
 class AmostradorVram:
@@ -104,46 +84,6 @@ def executar_etapa(nome: str, cmd: list[str], duracao_video_s: float) -> dict:
     print(f"[{nome}] {tempo:.1f}s ({resultado['velocidade_x_tempo_real']}x tempo real, "
           f"~{resultado['extrapolado_jogo_2h_min']} min para 2 h, VRAM +{vram.pico_extra_mib} MiB)")
     return resultado
-
-
-def largura_par(info: dict, altura: int) -> int:
-    """Largura proporcional à altura desejada, arredondada para número par."""
-    return round(info["largura"] * altura / info["altura"] / 2) * 2
-
-
-def cmd_proxy(video: Path, destino: Path, info: dict, cfg: dict, nvdec: bool) -> list[str]:
-    p = cfg["proxy"]
-    largura = largura_par(info, p["altura"])
-    if nvdec:
-        pre = ["-hwaccel", "cuda", "-hwaccel_output_format", "cuda"]
-        filtro = f"fps={p['fps']},scale_cuda={largura}:{p['altura']},hwdownload,format=nv12"
-    else:
-        pre = []
-        filtro = f"fps={p['fps']},scale={largura}:{p['altura']}"
-    return ["ffmpeg", "-nostdin", "-loglevel", "error", "-y", *pre, "-i", str(video),
-            "-an", "-vf", filtro, "-c:v", "libx264", "-preset", "veryfast", "-crf", "28",
-            str(destino)]
-
-
-def cmd_audio(video: Path, destino: Path, cfg: dict) -> list[str]:
-    return ["ffmpeg", "-nostdin", "-loglevel", "error", "-y", "-i", str(video), "-vn",
-            "-ac", "1", "-ar", str(cfg["audio"]["taxa_hz"]), "-c:a", "pcm_s16le", str(destino)]
-
-
-def cmd_saida(video: Path, destino: Path, info: dict, cfg: dict, nvdec: bool) -> list[str]:
-    s = cfg["saida"]
-    largura = largura_par(info, s["altura"])
-    if nvdec:
-        pre = ["-hwaccel", "cuda", "-hwaccel_output_format", "cuda"]
-        filtro = f"scale_cuda={largura}:{s['altura']}"
-    else:
-        pre = []
-        filtro = f"scale={largura}:{s['altura']}"
-    fps = ["-r", str(s["fps"])] if s.get("fps") else []
-    return ["ffmpeg", "-nostdin", "-loglevel", "error", "-y", *pre, "-i", str(video),
-            "-vf", filtro, *fps, "-c:v", s["codec"], "-preset", s["preset"],
-            "-rc", "vbr", "-cq", str(s["cq"]), "-b:v", "0",
-            "-c:a", s["audio_codec"], "-b:a", s["audio_bitrate"], str(destino)]
 
 
 def principal():
