@@ -71,6 +71,22 @@ def test_corte_sintetico_e_encontrado(tmp_path, cfg):
     assert cortes.loc[0, "origem"] == "visual"
 
 
+def test_aplicar_correcoes():
+    import pandas as pd
+
+    from rallycut.cortes import aplicar_correcoes
+    cortes = pd.DataFrame({"id": [1, 2], "tempo_s": [5.0, 9.0], "frame": [150, 270],
+                           "z_visual": [30.0, 9.0], "z_audio": [10.0, 1.0],
+                           "origem": ["visual", "visual"], "confianca": ["alta", "baixa"],
+                           "aceito": [True, False]})
+    corr = pd.DataFrame({"acao": ["remover", "aceitar", "adicionar"], "valor": [1, 2, 7.0]})
+    saida = aplicar_correcoes(cortes, corr, 30)
+    assert list(saida["tempo_s"]) == [5.0, 7.0, 9.0]
+    assert list(saida["aceito"]) == [False, True, True]
+    with pytest.raises(ValueError):
+        aplicar_correcoes(cortes, pd.DataFrame({"acao": ["remover"], "valor": [99]}), 30)
+
+
 def test_trechos_entre_cortes():
     t = trechos_entre_cortes(np.array([10.0, 4.0]), 30.0)
     assert list(t["inicio_s"]) == [0.0, 4.0, 10.0]

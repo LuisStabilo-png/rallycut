@@ -157,6 +157,32 @@ def classificar(corte, cfg: dict) -> str:
     return "baixa"
 
 
+def aplicar_correcoes(cortes: pd.DataFrame, correcoes: pd.DataFrame, fps: float) -> pd.DataFrame:
+    """Aplica as correções feitas na validação manual.
+
+    `correcoes` tem as colunas `acao` e `valor`:
+      remover,<id>     - o candidato não é corte;
+      aceitar,<id>     - o candidato (ex.: confiança baixa) é corte de verdade;
+      adicionar,<s>    - corte perdido no tempo `s` (segundos)."""
+    cortes = cortes.copy()
+    for c in correcoes.itertuples():
+        acao = str(c.acao).strip().lower()
+        if acao in ("remover", "aceitar"):
+            alvo = cortes["id"] == int(c.valor)
+            if not alvo.any():
+                raise ValueError(f"correção refere-se a um id inexistente: {c.valor}")
+            cortes.loc[alvo, "aceito"] = acao == "aceitar"
+            cortes.loc[alvo, "origem"] = "manual"
+        elif acao == "adicionar":
+            frame = int(round(float(c.valor) * fps))
+            cortes.loc[len(cortes)] = {"id": cortes["id"].max() + 1, "tempo_s": frame / fps,
+                                       "frame": frame, "z_visual": 0.0, "z_audio": 0.0,
+                                       "origem": "manual", "confianca": "manual", "aceito": True}
+        else:
+            raise ValueError(f"ação desconhecida: {c.acao!r} (use remover, aceitar ou adicionar)")
+    return cortes.sort_values("tempo_s").reset_index(drop=True)
+
+
 def trechos_entre_cortes(tempos: np.ndarray, duracao_s: float) -> pd.DataFrame:
     """Cada trecho entre cortes consecutivos é um rally (positivo rotulado)."""
     bordas = np.concatenate([[0.0], np.sort(tempos), [duracao_s]])
