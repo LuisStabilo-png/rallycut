@@ -49,15 +49,20 @@ def _mmss(t: float) -> str:
 
 
 def gerar_html(video: Path, cortes, trechos, fps: float, destino: Path,
-               n_amostra_alta: int = 30, longo_s: float = 45.0, curto_s: float = 2.0,
-               semente: int = 0, progresso=print) -> None:
-    """Relatório HTML autocontido: todos os cortes de confiança média/baixa, uma amostra
-    dos de confiança alta e os trechos suspeitos (muito curtos ou muito longos)."""
+               n_amostra_alta: int = 20, n_amostra_media: int = 40, longo_s: float = 45.0,
+               curto_s: float = 2.0, semente: int = 0, progresso=print) -> None:
+    """Relatório HTML autocontido: todos os cortes de confiança baixa, uma amostra dos de
+    confiança média e alta, e os trechos suspeitos (muito curtos ou muito longos)."""
     rng = np.random.default_rng(semente)
-    alta = cortes[cortes["confianca"] == "alta"]
-    amostra = alta.iloc[np.sort(rng.choice(len(alta), min(n_amostra_alta, len(alta)), replace=False))]
-    revisar = cortes[cortes["confianca"] != "alta"]
-    selecionados = (np.concatenate([revisar["id"].to_numpy(), amostra["id"].to_numpy()]))
+
+    def amostrar(conf: str, n: int):
+        g = cortes[cortes["confianca"] == conf]
+        return g.iloc[np.sort(rng.choice(len(g), min(n, len(g)), replace=False))]
+
+    outros = cortes[~cortes["confianca"].isin(["alta", "media"])]
+    amostra = amostrar("alta", n_amostra_alta)
+    selecionados = np.concatenate([outros["id"].to_numpy(), amostra["id"].to_numpy(),
+                                   amostrar("media", n_amostra_media)["id"].to_numpy()])
     sel = cortes[cortes["id"].isin(selecionados)].sort_values("tempo_s")
 
     cartoes = []
@@ -108,7 +113,7 @@ outras posições.</p>
 <code>remover,&lt;id&gt;</code> (não é corte), <code>aceitar,&lt;id&gt;</code> (é corte, mas estava rejeitado),
 <code>adicionar,&lt;segundos&gt;</code> (corte perdido).</p>
 <h2>Suspeitos ({len(suspeitos)})</h2>{''.join(suspeitos) or '<p>Nenhum.</p>'}
-<h2>Cortes para validar ({len(sel)}: todos os médios/baixos + amostra de {len(amostra)} altos)</h2>
+<h2>Cortes para validar ({len(sel)}: todos os de baixa confiança + amostras dos médios e altos)</h2>
 <div class="grade">{''.join(cartoes)}</div></html>"""
     destino.write_text(html, encoding="utf-8")
 

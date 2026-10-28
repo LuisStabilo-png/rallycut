@@ -71,6 +71,16 @@ def test_corte_sintetico_e_encontrado(tmp_path, cfg):
     assert cortes.loc[0, "origem"] == "visual"
 
 
+def test_piso_absoluto_descarta_movimento_em_cena_estatica(cfg):
+    z = np.zeros(600)
+    z[100] = z[300] = 30.0
+    fracoes = np.full(600, 0.001)
+    fracoes[100] = 0.06   # corte real: muitos pixels mudaram
+    fracoes[300] = 0.008  # z alto, mas só um jogador se mexeu
+    cortes = detectar_cortes(z, 30, np.zeros(0), np.zeros(0), cfg, fracoes)
+    assert list(cortes["frame"]) == [101]
+
+
 def test_aplicar_correcoes():
     import pandas as pd
 

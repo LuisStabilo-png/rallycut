@@ -27,6 +27,8 @@ geral:
     piso_audio: 0.05     # piso do denominador do z de áudio
     janelas_audio: 5     # nº de janelas de 10 ms comparadas antes/depois do ponto
     visual_min: 8.0      # z visual mínimo para virar candidato
+    fracao_min: 0.02     # fração mínima de pixels alterados (escala absoluta); cortes reais
+                         # ficaram em ~5-9%, falsos em ~1% nos vídeos de teste
     visual_alta: 20.0    # z visual para confiança alta/média
     audio_confirma: 5.0  # z de áudio que confirma um corte visual
     audio_solo: null     # z de áudio para candidato só-áudio (null = desligado); no vídeo

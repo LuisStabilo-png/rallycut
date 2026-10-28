@@ -22,7 +22,8 @@ def principal():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("video", type=Path)
     ap.add_argument("--saida", type=Path, default=Path("outputs/fase1"))
-    ap.add_argument("--amostra-alta", type=int, default=30)
+    ap.add_argument("--amostra-alta", type=int, default=20)
+    ap.add_argument("--amostra-media", type=int, default=40)
     ap.add_argument("--sem-correcoes", action="store_true")
     args = ap.parse_args()
 
@@ -39,7 +40,8 @@ def principal():
     trechos.to_csv(pasta / "trechos.csv", index=False)
 
     destino = pasta / "relatorio.html"
-    gerar_html(args.video, cortes, trechos, info["fps"], destino, n_amostra_alta=args.amostra_alta)
+    gerar_html(args.video, cortes, trechos, info["fps"], destino,
+               n_amostra_alta=args.amostra_alta, n_amostra_media=args.amostra_media)
     print(f"relatório: {destino.resolve()}")
 
 

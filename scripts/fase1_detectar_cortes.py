@@ -50,7 +50,7 @@ def processar(video: Path, modalidade: str, saida_base: Path, config: Path | Non
     z_vis = z_visual(medias, fracoes, info["fps"], cc)
     t1 = time.perf_counter()
 
-    cortes = detectar_cortes(z_vis, info["fps"], t_audio, z_aud, cc)
+    cortes = detectar_cortes(z_vis, info["fps"], t_audio, z_aud, cc, fracoes)
     aceitos = cortes.loc[cortes["aceito"], "tempo_s"].to_numpy()
     trechos = trechos_entre_cortes(aceitos, info["duracao_s"])
     cortes.to_csv(destino / "cortes.csv", index=False)
