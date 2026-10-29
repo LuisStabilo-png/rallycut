@@ -8,11 +8,11 @@ from rallycut.features import JANELA_S
 BASE = ["mov_med", "mov_frac", "n", "perto_med", "custo_hung", "rms_db", "fluxo", "disp_x", "disp_y"]
 
 
-def com_contexto(df: pd.DataFrame, janelas: tuple = (10, 30)) -> pd.DataFrame:
+def com_contexto(df: pd.DataFrame, janelas: tuple = (10, 30), colunas: list = BASE) -> pd.DataFrame:
     """Acrescenta média e desvio móveis centrados (5 s e 15 s): uma janela sozinha é ambígua,
     o padrão ao redor (jogo contínuo x parada) é que diferencia rally de tempo morto."""
     extra = {f"{c}_{op}{k}": getattr(df[c].rolling(k, center=True, min_periods=1), op)()
-             for c in BASE for k in janelas for op in ("mean", "std")}
+             for c in colunas for k in janelas for op in ("mean", "std")}
     return pd.concat([df, pd.DataFrame(extra)], axis=1)
 
 

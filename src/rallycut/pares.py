@@ -3,15 +3,17 @@
 Para cada par, em outputs/pares/<par>/ (só refaz o que falta):
   trechos.csv ...  alinhamento bruto <-> editado (o gabarito)
   janelas.csv ...  features por janela de 0,5 s + `rotulo` (1 = rally, 0 = tempo morto)
+  embeddings.npy .. embedding visual (960) de cada janela
 """
 
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 
 from rallycut.alinhamento import alinhar_par
 from rallycut.config import MODALIDADES, carregar_config
-from rallycut.features import features_video, rotular_janelas
+from rallycut.features import carregar_embedder, features_video, rotular_janelas
 from rallycut.media import sondar_video
 from rallycut.pessoas import carregar_detector
 
@@ -31,10 +33,12 @@ def preparar_par(pasta: Path, saida_base: Path = Path("outputs/pares"), progress
     if not (saida / "trechos.csv").exists():
         progresso(f"[{pasta.name}] alinhando bruto e editado...")
         alinhar_par(bruto, editado, saida, cfg)
-    if not (saida / "janelas.csv").exists():
+    if not (saida / "janelas.csv").exists() or not (saida / "embeddings.npy").exists():
         progresso(f"[{pasta.name}] extraindo features...")
         info = sondar_video(bruto)
-        f = features_video(bruto, saida / "audio_bruto.wav", info["duracao_s"], carregar_detector())
+        f, emb = features_video(bruto, saida / "audio_bruto.wav", info["duracao_s"],
+                                carregar_detector(), carregar_embedder())
+        np.save(saida / "embeddings.npy", emb)
         f["rotulo"] = rotular_janelas(f["t"].to_numpy(), pd.read_csv(saida / "trechos.csv"))
         f.round(5).to_csv(saida / "janelas.csv", index=False)
     return saida

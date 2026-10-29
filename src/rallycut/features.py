@@ -8,13 +8,30 @@ import cv2
 import numpy as np
 import pandas as pd
 import soundfile as sf
+import torch
 from scipy.signal import stft
+from torchvision.models import MobileNet_V3_Large_Weights, mobilenet_v3_large
 
 from rallycut.media import iterar_frames
-from rallycut.pessoas import continuidade, detectar_pessoas
+from rallycut.pessoas import PASTA_MODELOS, continuidade, detectar_pessoas
 
 JANELA_S, FPS = 0.5, 4
 POR_JANELA = int(JANELA_S * FPS)
+
+
+def carregar_embedder(device: str = "cuda"):
+    """MobileNetV3-Large (ImageNet): imagem -> vetor de 960 números. Pesos em data/modelos/."""
+    torch.hub.set_dir(str(PASTA_MODELOS))
+    m = mobilenet_v3_large(weights=MobileNet_V3_Large_Weights.DEFAULT)
+    return torch.nn.Sequential(m.features, m.avgpool, torch.nn.Flatten()).eval().to(device)
+
+
+@torch.no_grad()
+def embeddings(modelo, frames_bgr: list, device: str = "cuda") -> np.ndarray:
+    x = torch.from_numpy(np.stack(frames_bgr)[..., ::-1].copy()).to(device).permute(0, 3, 1, 2).float() / 255
+    media = torch.tensor([0.485, 0.456, 0.406], device=device).view(1, 3, 1, 1)
+    desvio = torch.tensor([0.229, 0.224, 0.225], device=device).view(1, 3, 1, 1)
+    return modelo((x - media) / desvio).cpu().numpy()
 
 
 def _audio(wav, n: int) -> pd.DataFrame:
@@ -51,15 +68,19 @@ def _jogadores(caixas: list) -> pd.DataFrame:
                                          "perto_med", "custo_hung", "frac_estavel"])
 
 
-def features_video(video, wav, duracao_s: float, modelo, device: str = "cuda", lote: int = 16) -> pd.DataFrame:
-    """DataFrame com uma linha por janela: `t` (início, s) e as features."""
+def features_video(video, wav, duracao_s: float, detector, embedder, device: str = "cuda", lote: int = 16):
+    """(DataFrame, embeddings): uma linha por janela (`t` = início em s, e as features) e a matriz
+    (janelas, 960) de embeddings visuais."""
     n = int(duracao_s / JANELA_S)
     mov = np.full((n * POR_JANELA, 2), np.nan)
     caixas, fila = [np.zeros((0, 5))] * n, []
+    emb = np.zeros((n, 960), np.float16)
 
     def detectar():
-        for (w, _), c in zip(fila, detectar_pessoas(modelo, [f for _, f in fila], device)):
-            caixas[w] = c
+        frames = [f for _, f in fila]
+        for (w, _), c, e in zip(fila, detectar_pessoas(detector, frames, device),
+                                embeddings(embedder, frames, device)):
+            caixas[w], emb[w] = c, e
         fila.clear()
 
     anterior = None
@@ -81,7 +102,7 @@ def features_video(video, wav, duracao_s: float, modelo, device: str = "cuda", l
 
     m = np.nanmean(mov.reshape(n, POR_JANELA, 2), axis=1)
     base = pd.DataFrame({"t": np.arange(n) * JANELA_S, "mov_med": m[:, 0], "mov_frac": m[:, 1]})
-    return pd.concat([base, _jogadores(caixas), _audio(wav, n)], axis=1)
+    return pd.concat([base, _jogadores(caixas), _audio(wav, n)], axis=1), emb
 
 
 def rotular_janelas(t: np.ndarray, trechos: pd.DataFrame) -> np.ndarray:

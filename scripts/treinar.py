@@ -21,18 +21,29 @@ import numpy as np
 import pandas as pd
 
 from rallycut.config import carregar_config
-from rallycut.deteccao import avaliar, com_contexto, segmentar
+from rallycut.deteccao import BASE, avaliar, com_contexto, segmentar
 from rallycut.features import JANELA_S
 from rallycut.pares import listar_pares, preparar_par
 
 BLOCO_S = 600
 
 
-def carregar(pasta: Path) -> pd.DataFrame:
-    d = com_contexto(pd.read_csv(pasta / "janelas.csv"))
-    d["par"], d["eh_praia"] = pasta.name, int(pasta.name.startswith("praia"))
-    d["bloco"] = (d["t"] // BLOCO_S).astype(int)
-    return d
+def carregar(pastas: list[Path], k_emb: int) -> tuple[pd.DataFrame, dict]:
+    """Junta as janelas de todos os pares, com as `k_emb` componentes principais dos embeddings
+    visuais (PCA ajustada em todos os pares) e o contexto temporal de cada feature."""
+    dfs = [pd.read_csv(p / "janelas.csv") for p in pastas]
+    pca, cols = {}, []
+    if k_emb:
+        embs = [np.load(p / "embeddings.npy").astype(np.float32) for p in pastas]
+        E = np.vstack(embs)
+        pca = {"media": E.mean(axis=0), "componentes": np.linalg.svd(E - E.mean(axis=0), full_matrices=False)[2][:k_emb]}
+        cols = [f"emb{i}" for i in range(k_emb)]
+        for df, e in zip(dfs, embs):
+            df[cols] = (e - pca["media"]) @ pca["componentes"].T
+    for df, p in zip(dfs, pastas):
+        df["par"], df["eh_praia"] = p.name, int(p.name.startswith("praia"))
+        df["bloco"] = (df["t"] // BLOCO_S).astype(int)
+    return pd.concat([com_contexto(df, colunas=BASE + cols) for df in dfs], ignore_index=True), pca
 
 
 PARAMS = {"objective": "binary", "learning_rate": 0.05, "num_leaves": 15, "min_data_in_leaf": 20,
@@ -62,11 +73,12 @@ def principal():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--pares", type=Path, default=Path("data/pares"))
     ap.add_argument("--saida", type=Path, default=Path("outputs/modelos"))
+    ap.add_argument("--embeddings", type=int, default=32, help="componentes dos embeddings visuais (0 = não usa)")
     args = ap.parse_args()
 
     saida_base = Path("outputs/pares")
     pastas = [preparar_par(p, saida_base) for p in listar_pares(args.pares)]
-    d = pd.concat([carregar(p) for p in pastas], ignore_index=True)
+    d, pca = carregar(pastas, args.embeddings)
     colunas = [c for c in d.columns if c not in ("t", "rotulo", "par", "bloco")]
     print(f"{len(pastas)} pares, {len(d)} janelas ({d['rotulo'].mean():.0%} rally), {len(colunas)} features\n")
 
@@ -91,6 +103,8 @@ def principal():
     final = treinar(d[colunas], d["rotulo"])
     args.saida.mkdir(parents=True, exist_ok=True)
     final.save_model(str(args.saida / "modelo.txt"))
+    if pca:
+        np.savez(args.saida / "pca.npz", **pca)
     imp = pd.Series(final.feature_importance("gain"), colunas).sort_values(ascending=False)
     (args.saida / "metricas.json").write_text(json.dumps(
         {"resultados": resultados, "importancia": imp.head(10).to_dict(), "colunas": colunas}, indent=1))
