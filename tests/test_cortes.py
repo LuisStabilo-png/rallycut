@@ -88,7 +88,7 @@ def test_piso_de_diferenca_media(cfg):
     fracoes[[100, 300]] = 0.06
     medias = np.full(600, 0.001)
     medias[100], medias[300] = 0.02, 0.008  # o segundo é movimento de poucos jogadores
-    cortes = detectar_cortes(z, 30, np.zeros(0), np.zeros(0), cfg, fracoes, medias)
+    cortes = detectar_cortes(z, 30, np.zeros(0), np.zeros(0), {**cfg, "media_min": 0.0125}, fracoes, medias)
     assert list(cortes["frame"]) == [101]
 
 
