@@ -35,9 +35,12 @@ def carregar(pasta: Path) -> pd.DataFrame:
     return d
 
 
-def modelo() -> lgb.LGBMClassifier:
-    return lgb.LGBMClassifier(n_estimators=300, learning_rate=0.05, num_leaves=15, min_child_samples=20,
-                              subsample=0.8, subsample_freq=1, colsample_bytree=0.8, verbose=-1)
+PARAMS = {"objective": "binary", "learning_rate": 0.05, "num_leaves": 15, "min_data_in_leaf": 20,
+          "bagging_fraction": 0.8, "bagging_freq": 1, "feature_fraction": 0.8, "verbose": -1}
+
+
+def treinar(X: pd.DataFrame, y: pd.Series) -> lgb.Booster:
+    return lgb.train(PARAMS, lgb.Dataset(X, y), num_boost_round=300)
 
 
 def relatorio(esquema: str, d: pd.DataFrame, proba: np.ndarray, saida_base: Path) -> list[dict]:
@@ -73,22 +76,22 @@ def principal():
     grupo = blocos % min(5, blocos.nunique())
     oof = np.zeros(len(d))
     for g in np.unique(grupo):
-        m = modelo().fit(d.loc[grupo != g, colunas], d.loc[grupo != g, "rotulo"])
-        oof[grupo == g] = m.predict_proba(d.loc[grupo == g, colunas])[:, 1]
+        m = treinar(d.loc[grupo != g, colunas], d.loc[grupo != g, "rotulo"])
+        oof[grupo == g] = m.predict(d.loc[grupo == g, colunas])
     resultados += relatorio("blocos", d, oof, saida_base)
 
     if len(pastas) > 1:
         oof = np.zeros(len(d))
         for par in d["par"].unique():
             fora = d["par"] == par
-            m = modelo().fit(d.loc[~fora, colunas], d.loc[~fora, "rotulo"])
-            oof[fora] = m.predict_proba(d.loc[fora, colunas])[:, 1]
+            m = treinar(d.loc[~fora, colunas], d.loc[~fora, "rotulo"])
+            oof[fora] = m.predict(d.loc[fora, colunas])
         resultados += relatorio("jogo", d, oof, saida_base)
 
-    final = modelo().fit(d[colunas], d["rotulo"])
+    final = treinar(d[colunas], d["rotulo"])
     args.saida.mkdir(parents=True, exist_ok=True)
-    final.booster_.save_model(str(args.saida / "modelo.txt"))
-    imp = pd.Series(final.feature_importances_, colunas).sort_values(ascending=False)
+    final.save_model(str(args.saida / "modelo.txt"))
+    imp = pd.Series(final.feature_importance("gain"), colunas).sort_values(ascending=False)
     (args.saida / "metricas.json").write_text(json.dumps(
         {"resultados": resultados, "importancia": imp.head(10).to_dict(), "colunas": colunas}, indent=1))
     print("\nfeatures mais usadas:", ", ".join(f"{k}" for k in imp.head(6).index))
