@@ -46,17 +46,14 @@ geral:
       continuidade_alta: 0.15  # perto_med para confiança alta
     tolerancia_audio_s: 0.08
     distancia_min_s: 1.0 # distância mínima entre cortes
+  deteccao:              # detector: probabilidade por janela -> rallies
+    limiar: 0.4          # probabilidade mínima de "rally" (menor = mais recall, mais tempo morto)
+    suavizar_s: 3.0      # mediana móvel da probabilidade
+    uniao_gap_s: 8.0     # une rallies separados por menos que isso (tempo morto real >= ~15 s)
+    duracao_min_s: 3.0   # descarta trechos mais curtos
+    margem_pre_s: 1.5    # folga antes do início detectado (nunca perder o saque)
+    margem_pos_s: 1.5    # folga depois do fim detectado
 
-quadra:
-  margem_pre_s: 2.0      # tempo mantido antes do saque (provisório)
-  margem_pos_s: 1.5      # tempo mantido após o fim do ponto (provisório)
-  duracao_min_rally_s: 3.0
-  uniao_gap_s: 2.0       # une trechos separados por menos que isso
-  peso_audio: 1.0
+quadra: {}
 
-praia:
-  margem_pre_s: 2.5
-  margem_pos_s: 1.5
-  duracao_min_rally_s: 3.0
-  uniao_gap_s: 2.0
-  peso_audio: 0.5        # áudio menos confiável (vento e ruído)
+praia: {}

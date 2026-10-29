@@ -9,11 +9,17 @@ dentro de um trecho o bruto avança 1 frame por frame do editado; um salto custa
 O tempo de cada trecho é depois refinado pela correlação do áudio.
 """
 
+import subprocess
+from pathlib import Path
+
 import numpy as np
 import pandas as pd
 import soundfile as sf
 import torch
 from scipy.signal import fftconvolve
+
+from rallycut.media import cmd_audio, ler_frames_cinza, sondar_video
+from rallycut.relatorio import amostra_alinhamento
 
 
 def descritores(frames: np.ndarray) -> torch.Tensor:
@@ -87,6 +93,28 @@ def refinar_audio(trechos: pd.DataFrame, wav_editado, wav_bruto, janela_s: float
     for c in ("bruto_ini", "bruto_fim"):
         t[c] += t["ajuste_s"]
     return t
+
+
+def alinhar_par(bruto: Path, editado: Path, saida: Path, cfg: dict) -> pd.DataFrame:
+    """Alinha um par bruto/editado e grava em `saida`: trechos.csv/json, removidos.csv, amostra.jpg
+    e os áudios (audio_bruto.wav, audio_editado.wav). Devolve os trechos."""
+    c = cfg["alinhamento"]
+    saida.mkdir(parents=True, exist_ok=True)
+    frames = [ler_frames_cinza(v, c["fps"], c["largura"], c["altura"]) for v in (editado, bruto)]
+    trechos = alinhar_imagem(*frames, c["fps"], c["salto"])
+    wavs = {}
+    for nome, video in (("editado", editado), ("bruto", bruto)):
+        wavs[nome] = saida / f"audio_{nome}.wav"
+        subprocess.run(cmd_audio(video, wavs[nome], cfg), check=True)
+    trechos = refinar_audio(trechos, wavs["editado"], wavs["bruto"], c["janela_audio_s"])
+    trechos.insert(0, "rally", range(1, len(trechos) + 1))
+    trechos["duracao_s"] = trechos["editado_fim"] - trechos["editado_ini"]
+    removidos = intervalos_removidos(trechos, sondar_video(bruto)["duracao_s"])
+    trechos.round(3).to_csv(saida / "trechos.csv", index=False)
+    trechos.round(3).to_json(saida / "trechos.json", orient="records", indent=1)
+    removidos.round(3).to_csv(saida / "removidos.csv", index=False)
+    amostra_alinhamento(trechos, bruto, editado, saida / "amostra.jpg")
+    return trechos
 
 
 def intervalos_removidos(trechos: pd.DataFrame, duracao_bruto_s: float) -> pd.DataFrame:

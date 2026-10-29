@@ -4,6 +4,8 @@ import json
 import subprocess
 from pathlib import Path
 
+import numpy as np
+
 
 def sondar_video(caminho: Path | str) -> dict:
     """Lê codec, resolução, fps, pix_fmt e duração do primeiro stream de vídeo."""
@@ -36,9 +38,23 @@ def _base(video: Path, nvdec: bool) -> list[str]:
     return ["ffmpeg", "-nostdin", "-loglevel", "error", "-y", *pre, "-i", str(video)]
 
 
+def iterar_frames(video: Path, fps: float, largura: int, altura: int, nvdec: bool = True):
+    """Gera os frames BGR (altura, largura, 3) amostrados a `fps`, em sequência (NVDEC)."""
+    filtro = (f"fps={fps},scale_cuda={largura}:{altura},hwdownload,format=nv12" if nvdec
+              else f"fps={fps},scale={largura}:{altura}")
+    cmd = [*_base(video, nvdec), "-an", "-vf", filtro, "-pix_fmt", "bgr24", "-f", "rawvideo", "-"]
+    tam = largura * altura * 3
+    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE)
+    try:
+        while len(dados := proc.stdout.read(tam)) == tam:
+            yield np.frombuffer(dados, np.uint8).reshape(altura, largura, 3)
+    finally:
+        proc.kill()
+        proc.wait()
+
+
 def ler_frames_cinza(video: Path, fps: float, largura: int, altura: int, nvdec: bool = True):
     """Todos os frames do vídeo em tons de cinza, amostrados a `fps`: array (n, altura, largura)."""
-    import numpy as np
     filtro = (f"fps={fps},scale_cuda={largura}:{altura},hwdownload,format=nv12" if nvdec
               else f"fps={fps},scale={largura}:{altura}")
     cmd = [*_base(video, nvdec), "-an", "-vf", filtro, "-pix_fmt", "gray", "-f", "rawvideo", "-"]
