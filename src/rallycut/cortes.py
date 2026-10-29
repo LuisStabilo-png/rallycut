@@ -108,17 +108,21 @@ def fluxo_audio(wav: Path, cfg: dict) -> tuple[np.ndarray, np.ndarray]:
 
 
 def detectar_cortes(z_vis: np.ndarray, fps: float, t_audio: np.ndarray,
-                    z_aud: np.ndarray, cfg: dict, fracoes: np.ndarray | None = None) -> pd.DataFrame:
+                    z_aud: np.ndarray, cfg: dict, fracoes: np.ndarray | None = None,
+                    medias: np.ndarray | None = None) -> pd.DataFrame:
     """Funde os dois sinais em uma tabela de cortes com confiança.
 
     O z é relativo ao ruído local e explode em cenas muito estáticas (qualquer
-    jogador em movimento vira "corte"). Por isso, quando `fracoes` é dado, exigimos
-    também que ao menos `fracao_min` dos pixels tenham mudado: um corte real troca a
-    posição de todos os jogadores, um movimento normal não."""
+    jogador em movimento vira "corte"). Por isso, quando `fracoes` e `medias` são
+    dados, exigimos também uma mudança absoluta mínima (fração de pixels alterados e
+    diferença média): um corte real troca a posição de todos os jogadores, um
+    movimento normal não."""
     dist = max(1, int(cfg["distancia_min_s"] * fps))
     picos, _ = find_peaks(z_vis, height=cfg["visual_min"], distance=dist)
     if fracoes is not None:
         picos = picos[fracoes[picos] >= cfg["fracao_min"]]
+    if medias is not None:
+        picos = picos[medias[picos] >= cfg["media_min"]]
     linhas = []
     for k in picos:
         t = (k + 1) / fps
