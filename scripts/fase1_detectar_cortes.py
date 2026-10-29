@@ -17,6 +17,7 @@ import time
 from pathlib import Path
 
 import numpy as np
+import pandas as pd
 
 from rallycut.config import MODALIDADES, carregar_config
 from rallycut.cortes import (detectar_cortes, extrair_diferencas, fluxo_audio,
@@ -24,8 +25,30 @@ from rallycut.cortes import (detectar_cortes, extrair_diferencas, fluxo_audio,
 from rallycut.media import cmd_audio, sondar_video
 
 
+def _verificar(video: Path, cortes: pd.DataFrame, vc: dict, cache: Path, reusar: bool) -> pd.DataFrame:
+    """Calcula (ou reaproveita) as métricas dos jogadores e decide quais candidatos são cortes."""
+    from rallycut.pessoas import carregar_detector, verificar_cortes
+
+    antigas = pd.read_csv(cache) if reusar and cache.exists() else pd.DataFrame(columns=["frame"])
+    faltam = sorted(set(cortes["frame"]) - set(antigas["frame"]))
+    novas = pd.DataFrame()
+    if faltam:
+        t0 = time.perf_counter()
+        novas = verificar_cortes(video, faltam, carregar_detector("cuda"))
+        print(f"   jogadores: {len(faltam)} candidatos em {time.perf_counter() - t0:.0f}s")
+    metricas = pd.concat([antigas, novas]).drop_duplicates("frame")
+    metricas.to_csv(cache, index=False)
+    cortes = cortes.merge(metricas, on="frame", how="left")
+    forte = cortes["fr"] >= vc["fracao_forte"]
+    cortes["aceito"] = (cortes["perto_med"] >= vc["continuidade_min"]) | forte
+    cortes["confianca"] = np.where(~cortes["aceito"], "baixa",
+                                   np.where((cortes["perto_med"] >= vc["continuidade_alta"]) | forte,
+                                            "alta", "media"))
+    return cortes
+
+
 def processar(video: Path, modalidade: str, saida_base: Path, config: Path | None,
-              nvdec: bool, reusar: bool = False):
+              nvdec: bool, reusar: bool = False, pessoas: bool = True):
     cfg = carregar_config(modalidade, config)
     cc = cfg["cortes"]
     info = sondar_video(video)
@@ -50,7 +73,15 @@ def processar(video: Path, modalidade: str, saida_base: Path, config: Path | Non
     z_vis = z_visual(medias, fracoes, info["fps"], cc)
     t1 = time.perf_counter()
 
-    cortes = detectar_cortes(z_vis, info["fps"], t_audio, z_aud, cc, fracoes, medias)
+    vc = cc["verificacao"]
+    if pessoas and vc["usar"]:
+        # candidatos permissivos; quem decide é a continuidade dos jogadores
+        cfg_cand = {**cc, "visual_min": vc["visual_min"], "fracao_min": vc["fracao_min"]}
+        cortes = detectar_cortes(z_vis, info["fps"], t_audio, z_aud, cfg_cand, fracoes, medias)
+        cortes["fr"] = fracoes[cortes["frame"].to_numpy() - 1]
+        cortes = _verificar(video, cortes, vc, destino / "pessoas.csv", reusar)
+    else:
+        cortes = detectar_cortes(z_vis, info["fps"], t_audio, z_aud, cc, fracoes, medias)
     aceitos = cortes.loc[cortes["aceito"], "tempo_s"].to_numpy()
     trechos = trechos_entre_cortes(aceitos, info["duracao_s"])
     cortes.to_csv(destino / "cortes.csv", index=False)
@@ -72,6 +103,8 @@ def principal():
     ap.add_argument("--config", type=Path, default=None)
     ap.add_argument("--saida", type=Path, default=Path("outputs/fase1"))
     ap.add_argument("--sem-nvdec", action="store_true")
+    ap.add_argument("--sem-pessoas", action="store_true",
+                    help="não usa o detector de pessoas (só pixels e áudio)")
     ap.add_argument("--reusar-sinais", action="store_true",
                     help="usa o sinais.npz já salvo (não relê o vídeo); útil ao ajustar limiares")
     args = ap.parse_args()
@@ -79,7 +112,8 @@ def principal():
         modalidade = args.modalidade or video.resolve().parent.name
         if modalidade not in MODALIDADES:
             ap.error(f"não deu para inferir a modalidade de {video}; use --modalidade")
-        processar(video, modalidade, args.saida, args.config, not args.sem_nvdec, args.reusar_sinais)
+        processar(video, modalidade, args.saida, args.config, not args.sem_nvdec, args.reusar_sinais,
+                  not args.sem_pessoas)
 
 
 if __name__ == "__main__":
