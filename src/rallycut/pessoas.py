@@ -27,20 +27,6 @@ def carregar_detector(device: str = "cuda"):
     return modelo.eval().to(device)
 
 
-def ler_par_frames(video: Path | str, frame: int) -> tuple[np.ndarray, np.ndarray]:
-    """Último frame antes e primeiro depois do corte (BGR, resolução original)."""
-    cap = cv2.VideoCapture(str(video))
-    try:
-        cap.set(cv2.CAP_PROP_POS_FRAMES, max(frame - 1, 0))
-        ok_a, antes = cap.read()
-        ok_d, depois = cap.read()
-    finally:
-        cap.release()
-    if not (ok_a and ok_d):
-        raise RuntimeError(f"não consegui ler os frames {frame - 1}/{frame} de {video}")
-    return antes, depois
-
-
 def extrair_pares(video: Path | str, frames: list[int], largura: int = 640, altura: int = 360,
                   nvdec: bool = True):
     """Gera (frame, antes, depois) para cada corte, numa única passada pelo vídeo.

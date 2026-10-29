@@ -77,11 +77,11 @@ def processar(video: Path, modalidade: str, saida_base: Path, config: Path | Non
     if pessoas and vc["usar"]:
         # candidatos permissivos; quem decide é a continuidade dos jogadores
         cfg_cand = {**cc, "visual_min": vc["visual_min"], "fracao_min": vc["fracao_min"]}
-        cortes = detectar_cortes(z_vis, info["fps"], t_audio, z_aud, cfg_cand, fracoes, medias)
+        cortes = detectar_cortes(z_vis, info["fps"], t_audio, z_aud, cfg_cand, fracoes)
         cortes["fr"] = fracoes[cortes["frame"].to_numpy() - 1]
         cortes = _verificar(video, cortes, vc, destino / "pessoas.csv", reusar)
     else:
-        cortes = detectar_cortes(z_vis, info["fps"], t_audio, z_aud, cc, fracoes, medias)
+        cortes = detectar_cortes(z_vis, info["fps"], t_audio, z_aud, cc, fracoes)
     aceitos = cortes.loc[cortes["aceito"], "tempo_s"].to_numpy()
     trechos = trechos_entre_cortes(aceitos, info["duracao_s"])
     cortes.to_csv(destino / "cortes.csv", index=False)

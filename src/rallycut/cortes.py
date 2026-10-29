@@ -108,42 +108,22 @@ def fluxo_audio(wav: Path, cfg: dict) -> tuple[np.ndarray, np.ndarray]:
 
 
 def detectar_cortes(z_vis: np.ndarray, fps: float, t_audio: np.ndarray,
-                    z_aud: np.ndarray, cfg: dict, fracoes: np.ndarray | None = None,
-                    medias: np.ndarray | None = None) -> pd.DataFrame:
+                    z_aud: np.ndarray, cfg: dict, fracoes: np.ndarray | None = None) -> pd.DataFrame:
     """Funde os dois sinais em uma tabela de cortes com confiança.
 
     O z é relativo ao ruído local e explode em cenas muito estáticas (qualquer
-    jogador em movimento vira "corte"). Por isso, quando `fracoes` e `medias` são
-    dados, exigimos também uma mudança absoluta mínima (fração de pixels alterados e
-    diferença média): um corte real troca a posição de todos os jogadores, um
-    movimento normal não."""
+    jogador em movimento vira "corte"). Por isso, quando `fracoes` é dado, exigimos
+    também que ao menos `fracao_min` dos pixels tenham mudado: um corte real troca a
+    posição de todos os jogadores, um movimento normal não. (Candidatos só-áudio foram
+    descartados: eram toques na bola e apito, nunca cortes.)"""
     dist = max(1, int(cfg["distancia_min_s"] * fps))
     picos, _ = find_peaks(z_vis, height=cfg["visual_min"], distance=dist)
     if fracoes is not None:
         picos = picos[fracoes[picos] >= cfg["fracao_min"]]
-    if medias is not None:
-        picos = picos[medias[picos] >= cfg["media_min"]]
-    linhas = []
-    for k in picos:
-        t = (k + 1) / fps
-        z_a = _max_audio(t_audio, z_aud, t, cfg["tolerancia_audio_s"])
-        linhas.append({"tempo_s": t, "frame": int(k + 1), "z_visual": float(z_vis[k]),
-                       "z_audio": z_a, "origem": "visual"})
-    # Cortes que quase não mexem a imagem (jogadores parados) só aparecem no áudio.
-    if len(z_aud) and cfg["audio_solo"] is not None:
-        dist_a = max(1, int(cfg["distancia_min_s"] / 0.010))
-        picos_a, _ = find_peaks(z_aud, height=cfg["audio_solo"], distance=dist_a)
-        tempos_visuais = np.array([l["tempo_s"] for l in linhas])
-        for k in picos_a:
-            t = float(t_audio[k])
-            if len(tempos_visuais) and np.min(np.abs(tempos_visuais - t)) < 2 * cfg["tolerancia_audio_s"]:
-                continue
-            frame = int(round(t * fps))
-            linhas.append({"tempo_s": round(frame / fps, 4), "frame": frame,
-                           "z_visual": float(z_vis[min(max(frame - 1, 0), len(z_vis) - 1)]) if len(z_vis) else 0.0,
-                           "z_audio": float(z_aud[k]), "origem": "audio"})
+    linhas = [{"tempo_s": (k + 1) / fps, "frame": int(k + 1), "z_visual": float(z_vis[k]),
+               "z_audio": _max_audio(t_audio, z_aud, (k + 1) / fps, cfg["tolerancia_audio_s"]),
+               "origem": "visual"} for k in picos]
     tabela = pd.DataFrame(linhas, columns=["tempo_s", "frame", "z_visual", "z_audio", "origem"])
-    tabela = tabela.sort_values("tempo_s").reset_index(drop=True)
     tabela["confianca"] = [classificar(r, cfg) for r in tabela.itertuples()]
     tabela["aceito"] = tabela["confianca"] != "baixa"  # só estes dividem os trechos
     tabela.insert(0, "id", np.arange(1, len(tabela) + 1))
@@ -159,8 +139,6 @@ def _max_audio(tempos: np.ndarray, z: np.ndarray, t: float, tol: float) -> float
 
 def classificar(corte, cfg: dict) -> str:
     audio_ok = corte.z_audio >= cfg["audio_confirma"]
-    if corte.origem == "audio":
-        return "baixa"
     if corte.z_visual >= cfg["visual_alta"] and audio_ok:
         return "alta"
     if corte.z_visual >= cfg["visual_alta"] or audio_ok:
