@@ -13,32 +13,10 @@ import subprocess
 import time
 from pathlib import Path
 
-import cv2
-import numpy as np
-
 from rallycut.alinhamento import alinhar_imagem, intervalos_removidos, refinar_audio
 from rallycut.config import MODALIDADES, carregar_config
 from rallycut.media import cmd_audio, ler_frames_cinza, sondar_video
-from rallycut.relatorio import rotular
-
-
-def _frame(video: Path, t: float, fps: float, largura: int = 480) -> np.ndarray:
-    cap = cv2.VideoCapture(str(video))
-    cap.set(cv2.CAP_PROP_POS_FRAMES, int(t * fps))
-    ok, img = cap.read()
-    cap.release()
-    return cv2.resize(img, (largura, round(img.shape[0] * largura / img.shape[1]))) if ok else None
-
-
-def amostra(trechos, bruto, editado, fps_b, fps_e, destino: Path, n: int = 8):
-    """Frame do editado (esq.) e do bruto (dir.) no meio de n trechos sorteados."""
-    linhas = []
-    for r in trechos.sample(min(n, len(trechos)), random_state=0).sort_index().itertuples():
-        meio = (r.editado_fim - r.editado_ini) / 2
-        a, b = _frame(editado, r.editado_ini + meio, fps_e), _frame(bruto, r.bruto_ini + meio, fps_b)
-        if a is not None and b is not None:
-            linhas.append(rotular(np.hstack([a, b]), f"trecho {r.Index + 1}  editado | bruto"))
-    cv2.imwrite(str(destino), np.vstack(linhas), [cv2.IMWRITE_JPEG_QUALITY, 80])
+from rallycut.relatorio import amostra_alinhamento
 
 
 def principal():
@@ -71,7 +49,7 @@ def principal():
     trechos.round(3).to_csv(args.saida / "trechos.csv", index=False)
     trechos.round(3).to_json(args.saida / "trechos.json", orient="records", indent=1)
     removidos.round(3).to_csv(args.saida / "removidos.csv", index=False)
-    amostra(trechos, args.bruto, args.editado, info_b["fps"], info_e["fps"], args.saida / "amostra.jpg")
+    amostra_alinhamento(trechos, args.bruto, args.editado, args.saida / "amostra.jpg")
 
     d = trechos["duracao_s"]
     print(f"{len(trechos)} trechos | duração mediana {d.median():.1f}s, min {d.min():.1f}s, máx {d.max():.1f}s")
