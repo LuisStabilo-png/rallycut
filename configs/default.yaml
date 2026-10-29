@@ -54,6 +54,9 @@ geral:
     margem_pre_s: 1.5    # folga antes do início detectado (nunca perder o saque)
     margem_pos_s: 1.5    # folga depois do fim detectado
 
-quadra: {}
+quadra:
+  deteccao:           # recall alto, calibrado em 2 sets (provisório): ~93-95% dos inícios
+    limiar: 0.2
+    margem_pre_s: 4.0
 
 praia: {}

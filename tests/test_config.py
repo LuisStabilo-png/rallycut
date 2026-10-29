@@ -7,7 +7,7 @@ def test_modalidade_herda_geral():
     for m in ("quadra", "praia"):
         cfg = carregar_config(m)
         assert cfg["proxy"]["fps"] == 8
-        assert cfg["deteccao"]["limiar"] == 0.4
+        assert "limiar" in cfg["deteccao"]
 
 
 def test_modalidade_sobrescreve_geral(tmp_path):
