@@ -36,6 +36,16 @@ def _base(video: Path, nvdec: bool) -> list[str]:
     return ["ffmpeg", "-nostdin", "-loglevel", "error", "-y", *pre, "-i", str(video)]
 
 
+def ler_frames_cinza(video: Path, fps: float, largura: int, altura: int, nvdec: bool = True):
+    """Todos os frames do vídeo em tons de cinza, amostrados a `fps`: array (n, altura, largura)."""
+    import numpy as np
+    filtro = (f"fps={fps},scale_cuda={largura}:{altura},hwdownload,format=nv12" if nvdec
+              else f"fps={fps},scale={largura}:{altura}")
+    cmd = [*_base(video, nvdec), "-an", "-vf", filtro, "-pix_fmt", "gray", "-f", "rawvideo", "-"]
+    saida = subprocess.run(cmd, capture_output=True, check=True).stdout
+    return np.frombuffer(saida, np.uint8).reshape(-1, altura, largura)
+
+
 def cmd_proxy(video: Path, destino: Path, info: dict, cfg: dict, nvdec: bool) -> list[str]:
     """Proxy de análise: baixa resolução e baixo fps, sem áudio."""
     p = cfg["proxy"]

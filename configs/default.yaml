@@ -19,6 +19,12 @@ geral:
     audio_bitrate: 160k
   janela:
     tamanho_s: 0.5       # janela de features (s)
+  alinhamento:           # alinhamento bruto <-> editado
+    fps: 10              # amostragem dos frames comparados (memória cresce com fps²)
+    largura: 128
+    altura: 72
+    salto: 3.0           # custo de um salto no bruto (corte); maior = menos trechos
+    janela_audio_s: 0.4  # correção máxima do deslocamento pelo áudio
   cortes:                # detecção de cortes em vídeos editados (Fase 1)
     largura: 256         # resolução da passada de cortes (cinza)
     altura: 144
