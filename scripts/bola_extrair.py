@@ -15,7 +15,7 @@ from pathlib import Path
 import numpy as np
 import torch
 
-from rallycut.bola import MapaBola, carregar_rotulos, extrair_candidatos, treinar_mapa
+from rallycut.bola import MapaBola, carregar_mapa, carregar_rotulos, extrair_candidatos, treinar_mapa
 from rallycut.pares import listar_pares
 
 SAIDA = Path("outputs/bola")
@@ -25,9 +25,7 @@ def detector(nome: str, d, imgs, centros, passos: int) -> MapaBola:
     """Carrega (ou treina e guarda) o detector que não viu o jogo `nome` (`todos` = viu todos)."""
     caminho = SAIDA / f"mapa_{nome}.pt"
     if caminho.exists():
-        modelo = MapaBola().cuda()
-        modelo.load_state_dict(torch.load(caminho))
-        return modelo.eval()
+        return carregar_mapa(caminho)
     t0 = time.time()
     treino = np.flatnonzero((d["par"] != nome).to_numpy())
     modelo = treinar_mapa(imgs[treino], [centros[i] for i in treino], passos)

@@ -150,6 +150,12 @@ def candidatos_bola(modelo: MapaBola, imagens: np.ndarray, device: str = "cuda",
     return saida
 
 
+def carregar_mapa(caminho: Path, device: str = "cuda") -> MapaBola:
+    modelo = MapaBola().to(device)
+    modelo.load_state_dict(torch.load(caminho, map_location=device))
+    return modelo.eval()
+
+
 def carregar_rotulos(saida: Path) -> tuple[pd.DataFrame, np.ndarray, list]:
     """Frames rotulados (scripts/bola_rotular.py): (tabela, imagens RGB na entrada do mapa, centros na
     escala da entrada ou None quando não há bola)."""
