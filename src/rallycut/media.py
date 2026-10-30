@@ -53,6 +53,12 @@ def iterar_frames(video: Path, fps: float, largura: int, altura: int, nvdec: boo
         proc.wait()
 
 
+def extrair_frame(video: Path, t: float, destino: Path, largura: int = 1920, altura: int = 1080):
+    """Um frame do instante `t` (s) do vídeo, salvo em `destino` (busca por tempo, não por índice)."""
+    subprocess.run(["ffmpeg", "-nostdin", "-loglevel", "error", "-y", "-ss", f"{t:.3f}", "-i", str(video),
+                    "-frames:v", "1", "-vf", f"scale={largura}:{altura}", "-q:v", "2", str(destino)], check=True)
+
+
 def ler_frames_cinza(video: Path, fps: float, largura: int, altura: int, nvdec: bool = True):
     """Todos os frames do vídeo em tons de cinza, amostrados a `fps`: array (n, altura, largura)."""
     filtro = (f"fps={fps},scale_cuda={largura}:{altura},hwdownload,format=nv12" if nvdec

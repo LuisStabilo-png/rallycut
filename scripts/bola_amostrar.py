@@ -8,12 +8,12 @@ Uso:
 """
 
 import argparse
-import subprocess
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
 
+from rallycut.media import extrair_frame
 from rallycut.pares import listar_pares
 
 SAIDA = Path("outputs/bola")
@@ -31,11 +31,6 @@ def sortear(intervalos: pd.DataFrame, n: int, rng, margem_s: float = 1.0) -> np.
         if all(abs(t - u) >= 1.0 for u in tempos):
             tempos.append(t)
     return np.sort(tempos)
-
-
-def extrair(video: Path, t: float, destino: Path):
-    subprocess.run(["ffmpeg", "-nostdin", "-loglevel", "error", "-y", "-ss", f"{t:.3f}", "-i", str(video),
-                    "-frames:v", "1", "-vf", "scale=1920:1080", "-q:v", "2", str(destino)], check=True)
 
 
 def principal():
@@ -56,7 +51,7 @@ def principal():
         for classe, csv in (("rally", "trechos.csv"), ("morto", "removidos.csv")):
             for t in sortear(pd.read_csv(gab / csv), args.n // 2, rng):
                 arq = f"{pasta.name}_{t:08.2f}_{classe}.jpg"
-                extrair(bruto, t, SAIDA / "frames" / arq)
+                extrair_frame(bruto, t, SAIDA / "frames" / arq)
                 linhas.append({"par": pasta.name, "t": round(t, 3), "classe": classe, "arquivo": arq})
         print(f"{pasta.name}: ok")
     pd.DataFrame(linhas).to_csv(SAIDA / "amostra.csv", index=False)
