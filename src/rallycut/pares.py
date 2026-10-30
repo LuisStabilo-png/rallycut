@@ -20,7 +20,8 @@ from rallycut.pessoas import carregar_detector
 
 
 def listar_pares(raiz: Path = Path("data/pares")) -> list[Path]:
-    return sorted(p for p in raiz.iterdir() if p.is_dir()
+    """Pares com bruto e editado; pastas com um arquivo `IGNORAR` (gabarito não confiável) ficam de fora."""
+    return sorted(p for p in raiz.iterdir() if p.is_dir() and not (p / "IGNORAR").exists()
                   and list(p.glob("*bruto*")) and list(p.glob("*editado*")))
 
 
