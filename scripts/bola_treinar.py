@@ -12,22 +12,14 @@ Uso:
 import argparse
 from pathlib import Path
 
-import cv2
 import numpy as np
 import pandas as pd
 
-from rallycut.bola import ALTURA, LARGURA, candidatos_bola, treinar_mapa
+from rallycut.bola import LARGURA, candidatos_bola, carregar_rotulos, treinar_mapa
 
 SAIDA = Path("outputs/bola")
 LIMIARES = (0.1, 0.2, 0.3, 0.5, 0.7)
 ESCALA = LARGURA / 1920
-
-
-def carregar() -> tuple[pd.DataFrame, np.ndarray]:
-    d = pd.read_csv(SAIDA / "amostra.csv").merge(pd.read_csv(SAIDA / "rotulos.csv"), on="arquivo")
-    imgs = np.stack([cv2.cvtColor(cv2.resize(cv2.imread(str(SAIDA / "frames" / a)), (LARGURA, ALTURA),
-                                             interpolation=cv2.INTER_AREA), cv2.COLOR_BGR2RGB) for a in d["arquivo"]])
-    return d, imgs
 
 
 def metricas(d: pd.DataFrame, cands: list[np.ndarray], raio: float) -> list[dict]:
@@ -55,8 +47,7 @@ def principal():
     ap.add_argument("--jogos", nargs="+", default=None, help="jogos de fora a avaliar (padrão: todos)")
     args = ap.parse_args()
 
-    d, imgs = carregar()
-    centros = [None if r.x != r.x else (r.x * ESCALA, r.y * ESCALA) for r in d.itertuples()]
+    d, imgs, centros = carregar_rotulos(SAIDA)
     resultados = []
     for jogo in args.jogos or sorted(d["par"].unique()):
         fora = (d["par"] == jogo).to_numpy()

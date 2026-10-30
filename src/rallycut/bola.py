@@ -1,12 +1,17 @@
 """Detecção da bola de vôlei: Faster R-CNN do COCO (classe "sports ball"), sem treino, e um mapa de calor próprio."""
 
+import warnings
+from pathlib import Path
+
 import cv2
 import numpy as np
+import pandas as pd
 import torch
 from torch import nn
 from torch.nn import functional as F
 from torchvision.models import MobileNet_V3_Large_Weights, mobilenet_v3_large
 
+from rallycut.media import iterar_frames
 from rallycut.pessoas import PASTA_MODELOS, carregar_detector, detectar_pessoas
 
 BOLA_COCO = 37
@@ -142,3 +147,85 @@ def candidatos_bola(modelo: MapaBola, imagens: np.ndarray, device: str = "cuda",
             saida.append(np.stack([(xs.cpu().numpy() + 0.5) * PASSO, (ys.cpu().numpy() + 0.5) * PASSO,
                                    v.cpu().numpy()], axis=1))
     return saida
+
+
+def carregar_rotulos(saida: Path) -> tuple[pd.DataFrame, np.ndarray, list]:
+    """Frames rotulados (scripts/bola_rotular.py): (tabela, imagens RGB na entrada do mapa, centros na
+    escala da entrada ou None quando não há bola)."""
+    d = pd.read_csv(saida / "amostra.csv").merge(pd.read_csv(saida / "rotulos.csv"), on="arquivo")
+    imgs = np.stack([cv2.cvtColor(cv2.resize(cv2.imread(str(saida / "frames" / a)), (LARGURA, ALTURA),
+                                             interpolation=cv2.INTER_AREA), cv2.COLOR_BGR2RGB) for a in d["arquivo"]])
+    esc = LARGURA / 1920
+    return d, imgs, [None if r.x != r.x else (r.x * esc, r.y * esc) for r in d.itertuples()]
+
+
+def extrair_candidatos(video: Path, modelo: MapaBola, fps: int = 8, minimo: float = 0.1, lote: int = 8,
+                       device: str = "cuda") -> pd.DataFrame:
+    """Picos de bola de todos os frames do vídeo, amostrados por tempo a `fps`:
+    colunas i (frame), x, y (escala da entrada) e score."""
+    linhas, fila = [], []
+
+    def processar():
+        for (i, _), c in zip(fila, candidatos_bola(modelo, np.stack([f for _, f in fila]), device, lote=len(fila))):
+            linhas.extend((i, x, y, s) for x, y, s in c if s >= minimo)
+        fila.clear()
+
+    for i, frame in enumerate(iterar_frames(video, fps, LARGURA, ALTURA)):
+        fila.append((i, frame[..., ::-1]))
+        if len(fila) == lote:
+            processar()
+    if fila:
+        processar()
+    return pd.DataFrame(linhas, columns=["i", "x", "y", "score"])
+
+
+def _estaticos(c: pd.DataFrame, n_frames: int, fps: int, janela_s: float, celula: int) -> np.ndarray:
+    """Máscara dos candidatos que ficam no mesmo lugar (célula ou vizinha) em >= metade dos frames de
+    +-`janela_s`: bolas reservas na areia, marcas e objetos redondos fixos."""
+    cx, cy = (c["x"] // celula).astype(int).to_numpy(), (c["y"] // celula).astype(int).to_numpy()
+    celulas = pd.Series(list(zip(cx, cy)))
+    k = int(2 * janela_s * fps) | 1
+    presenca = {}
+    for cel, g in celulas.groupby(celulas):
+        if len(g) >= k // 4:  # uma bola parada precisa estar em >= k/2 frames, com folga para falhas
+            v = np.zeros(n_frames)
+            v[c["i"].to_numpy()[g.index]] = 1
+            presenca[cel] = pd.Series(v).rolling(k, center=True, min_periods=1).mean().to_numpy()
+    vazio = np.zeros(n_frames)
+    return np.array([any(presenca.get((x + dx, y + dy), vazio)[i] >= 0.5 for dx in (-1, 0, 1) for dy in (-1, 0, 1))
+                     for x, y, i in zip(cx, cy, c["i"])], bool)
+
+
+def features_bola(c: pd.DataFrame, n_janelas: int, fps: int = 8, janela_s: float = 0.5, score_min: float = 0.3,
+                  estatico_s: float = 10.0, celula: int = 32) -> pd.DataFrame:
+    """Features da bola em movimento por janela: nº de bolas por frame, score máximo, fração de frames com
+    bola, altura (média e mínima, 0 = topo), velocidade mediana e máxima (largura de quadro por s).
+    Candidatos parados (ver `_estaticos`) são ignorados. Janelas sem bola ficam com NaN."""
+    por_janela = int(janela_s * fps)
+    n_frames = n_janelas * por_janela
+    c = c[(c["score"] >= score_min) & (c["i"] < n_frames)].reset_index(drop=True)
+    if len(c):
+        c = c[~_estaticos(c, n_frames, fps, estatico_s, celula)].reset_index(drop=True)
+    melhor = (c.loc[c.groupby("i")["score"].idxmax()] if len(c) else c).set_index("i").astype(float).reindex(range(n_frames))
+    n_por_frame = c.groupby("i").size().reindex(range(n_frames), fill_value=0).to_numpy()
+    x, y = melhor["x"].to_numpy(), melhor["y"].to_numpy()
+    passo = np.hypot(np.diff(x, prepend=np.nan), np.diff(y, prepend=np.nan))
+    passo[passo > 0.25 * LARGURA] = np.nan  # salto grande: outra bola ou outro objeto, não é o mesmo deslocamento
+    vel = passo * fps / LARGURA
+
+    def por(v, f):
+        a = v.reshape(n_janelas, por_janela)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", RuntimeWarning)  # janelas sem bola: fatias só com NaN
+            return np.where(np.isnan(a).all(axis=1), np.nan, f(a))
+
+    ha = ~np.isnan(x)
+    return pd.DataFrame({
+        "bola_n": n_por_frame.reshape(n_janelas, por_janela).mean(axis=1),
+        "bola_score": por(melhor["score"].to_numpy(), lambda a: np.nanmax(a, axis=1)),
+        "bola_frac": ha.reshape(n_janelas, por_janela).mean(axis=1),
+        "bola_y": por(y / ALTURA, lambda a: np.nanmean(a, axis=1)),
+        "bola_ymin": por(y / ALTURA, lambda a: np.nanmin(a, axis=1)),
+        "bola_vel": por(vel, lambda a: np.nanmedian(a, axis=1)),
+        "bola_velmax": por(vel, lambda a: np.nanmax(a, axis=1)),
+    })
