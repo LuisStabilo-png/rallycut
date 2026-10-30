@@ -59,15 +59,16 @@ def extrair_pares(video: Path | str, frames: list[int], largura: int = 640, altu
 
 
 @torch.no_grad()
-def detectar_pessoas(modelo, imagens_bgr: list[np.ndarray], device: str = "cuda") -> list[np.ndarray]:
-    """Caixas de pessoas por imagem: array (n, 5) com x1, y1, x2, y2 normalizados (0-1) e score."""
+def detectar_pessoas(modelo, imagens_bgr: list[np.ndarray], device: str = "cuda",
+                     classe: int = PESSOA_COCO) -> list[np.ndarray]:
+    """Caixas de `classe` (padrão: pessoa) por imagem: array (n, 5) com x1, y1, x2, y2 normalizados (0-1) e score."""
     tensores = [torch.from_numpy(cv2.cvtColor(i, cv2.COLOR_BGR2RGB)).permute(2, 0, 1).float().div(255).to(device)
                 for i in imagens_bgr]
     saidas = modelo(tensores)
     resultado = []
     for img, s in zip(imagens_bgr, saidas):
         h, w = img.shape[:2]
-        m = (s["labels"] == PESSOA_COCO).cpu().numpy()
+        m = (s["labels"] == classe).cpu().numpy()
         caixas = s["boxes"].cpu().numpy()[m] / np.array([w, h, w, h])
         resultado.append(np.hstack([caixas, s["scores"].cpu().numpy()[m, None]]) if m.any()
                          else np.zeros((0, 5)))
