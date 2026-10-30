@@ -58,8 +58,11 @@ geral:
     margem_pos_s: 1.5    # folga depois do fim detectado
 
 quadra:
-  deteccao:           # recall alto, calibrado em 2 sets (provisório): ~93-95% dos inícios
-    limiar: 0.2
+  deteccao:           # calibrado para o TCN com bola (scripts/calibrar_limiar.py, 9 pares, jogo de fora):
+    limiar: 0.40      # ~97% dos inícios (pior par 94%) com a saída em ~1,8x o gabarito
     margem_pre_s: 4.0
 
-praia: {}
+praia:
+  deteccao:           # idem: ~97% dos inícios (pior par 95%) com a saída em ~2,3x o gabarito
+    limiar: 0.25
+    margem_pre_s: 4.0
