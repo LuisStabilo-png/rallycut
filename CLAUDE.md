@@ -36,11 +36,11 @@ uv run python scripts/fase2_estatisticas.py --pasta outputs/pares/quadra_set1
 ```
 
 ## Estado e achados (2026-10-30)
-- 6 pares: quadra_set1/2 (mesmo ginásio e câmera), praia_set1..4 (câmeras em posições diferentes).
+- 7 pares: quadra_set1/2 (mesmo ginásio e câmera), praia_set1..4 e praia_Set5 (câmeras em posições diferentes; a pasta se chama `praia_Set5`, com S maiúsculo).
 - Estatísticas da quadra: rally mediana 10 s; tempo morto removido >= ~15 s (unir trechos com gap < 10 s é seguro).
 - Quadra com LightGBM + embeddings: 86-100% dos inícios preservados (jogo de fora 89-93%) com ~40-50% de tempo morto sobrando (saída ~14 min vs 8,4 do gabarito). Config de recall alto (limiar 0,2, margem pré 4 s) em `configs/default.yaml`. Generalização para OUTRO ginásio ainda não testada.
 - Praia: não utilizável (AUC jogo de fora 0,65-0,86; só chega a bons inícios mantendo 2-3x o vídeo ideal). Cada jogo tem posição de câmera diferente. Resolução de detecção 720p vs 360p: sem ganho. Normalizar features por vídeo: sem ganho claro.
 - Áudio não separa rally de tempo morto (toques/s iguais dentro e fora); detector de toques foi removido.
 - Descartado: compensação de movimento de câmera, candidatos só-áudio, filtro `media_min`.
-- TCN x LightGBM (`treinar_temporal.py --sementes 3`, jogo de fora, saída = 1,5x o gabarito, média ± desvio): início preservado médio quadra 88% (LightGBM) / 94±1% (TCN global) / 93±2% (TCN por vídeo); praia 57% / 60±2% / **66±4%**. Quadra: TCN > LightGBM (+5 a +6 pontos), global ≈ por vídeo. Praia: TCN por vídeo melhor (set4 62% -> 77±1%, AUC 0,85 -> 0,92; set3 50% -> 68±7%), mas praia_set1/2 ~ LightGBM e desvio alto. Praia ainda longe da meta. Falta: salvar um TCN final (o script só avalia).
+- TCN x LightGBM (`treinar_temporal.py --sementes 3`, 7 pares, jogo de fora, saída = 1,5x o gabarito, média ± desvio): início preservado médio quadra 89% (LightGBM) / 93±2% (TCN global) / 93±1% (TCN por vídeo); praia 64% / 65±3% / **75±1%**. TCN por vídeo é o melhor na praia (set1 57% -> 76%, set3 50% -> 78%, Set5 80% -> 89%), exceto praia_set2 (~55%, AUC 0,68 em todos). Quadra: TCN ≥ LightGBM, global ≈ por vídeo. Praia ainda abaixo do ideal. Falta: salvar um TCN final (o script só avalia).
 - Próximos passos possíveis: mais pares (praia por posição de câmera; quadra de outro ginásio), proxy único por vídeo para acelerar, Fase 3 (app Gradio com revisão; praia semi-automática), corte final com NVENC. Capítulos do YouTube: adiado pelo usuário.
