@@ -2,6 +2,7 @@
 
 import numpy as np
 import pandas as pd
+from scipy.ndimage import label
 
 from rallycut.features import JANELA_S
 
@@ -19,10 +20,14 @@ def com_contexto(df: pd.DataFrame, janelas: tuple = (10, 30), colunas: list = BA
 def segmentar(p: np.ndarray, cfg: dict, duracao_s: float) -> np.ndarray:
     """Probabilidades por janela -> rallies (n, 2) em segundos [início, fim].
 
-    Suaviza, aplica o limiar, une paradas curtas, descarta trechos curtos e põe as margens."""
+    Suaviza, aplica o limiar (com histerese: o rally abre em `limiar` mas se estende até
+    `limiar * histerese`, pegando a subida e a descida lentas), une paradas curtas, descarta
+    trechos curtos e põe as margens."""
     # janela ímpar: simétrica, então a suavização não desloca o início nem o fim dos rallies
     s = pd.Series(p).rolling(int(cfg["suavizar_s"] / JANELA_S) | 1, center=True, min_periods=1).median()
-    on = (s >= cfg["limiar"]).to_numpy()
+    s = s.to_numpy()
+    zonas = label(s >= cfg["limiar"] * cfg.get("histerese", 1.0))[0]
+    on = np.isin(zonas, zonas[(s >= cfg["limiar"]) & (zonas > 0)])
     ini = np.flatnonzero(on & ~np.r_[False, on[:-1]]) * JANELA_S
     fim = (np.flatnonzero(on & ~np.r_[on[1:], False]) + 1) * JANELA_S
     uniao = []

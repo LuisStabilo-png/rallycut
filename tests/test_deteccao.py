@@ -21,6 +21,15 @@ def test_segmentar_une_gaps_curtos_descarta_curtos_e_poe_margens():
     assert np.allclose(segs, [[9, 31], [69, 81]])
 
 
+def test_segmentar_histerese_estende_subida_e_descida_lentas():
+    p = _prob([(10, 20)])
+    p[int(8 / JANELA_S):int(10 / JANELA_S)] = 0.3  # subida lenta, abaixo do limiar
+    assert np.allclose(segmentar(p, CFG, 100), [[9, 21]])
+    assert np.allclose(segmentar(p, {**CFG, "histerese": 0.5}, 100), [[7, 21]])
+    p[int(60 / JANELA_S):int(70 / JANELA_S)] = 0.3  # trecho só "médio": não abre rally sozinho
+    assert len(segmentar(p, {**CFG, "histerese": 0.5}, 100)) == 1
+
+
 def test_avaliar_inicio_preservado_perdidos_e_falsos():
     gt = pd.DataFrame({"bruto_ini": [10.0, 40.0, 70.0], "bruto_fim": [20.0, 50.0, 80.0]})
     segs = np.array([[9.0, 21.0], [41.0, 49.0], [90.0, 95.0]])  # 40 s cortado em 1 s; 70 s perdido

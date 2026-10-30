@@ -4,7 +4,9 @@ Os modelos calibram a probabilidade de formas diferentes, então a comparação 
 tamanho de saída: o início preservado quando o vídeo final tem `--razao` x o tempo do gabarito.
 
 Uso:
-    uv run python scripts/treinar_temporal.py [--passos 1500] [--modos global video] [--sementes 3]
+    uv run python scripts/treinar_temporal.py [--passos 1500] [--modos global video] [--sementes 3] [--histerese 1 0.5]
+
+O "ensemble" é a média dos percentis (por jogo) do LightGBM e dos TCNs, semente a semente.
 """
 
 import argparse
@@ -28,6 +30,8 @@ def principal():
     ap.add_argument("--modos", nargs="+", default=["global", "video"], choices=["global", "video"])
     ap.add_argument("--razao", type=float, default=1.5)
     ap.add_argument("--sementes", type=int, default=1, help="repetições do treino do TCN")
+    ap.add_argument("--histerese", type=float, nargs="+", default=[1.0, 0.5],
+                    help="fatores de histerese da segmentação (1 = sem)")
     args = ap.parse_args()
 
     altura = args.altura or carregar_config("quadra")["features"]["altura"]
@@ -54,21 +58,25 @@ def principal():
                 prever(treinar_tcn([Z[j] for j in treino], [ys[j] for j in treino], args.passos, semente=s), Z[i])
                 for s in range(args.sementes)])
 
-    print(f"\njogo de fora; início preservado com vídeo final = {args.razao}x o gabarito (margem pré 4 s); "
-          f"{args.sementes} semente(s): média ± desvio")
-    print(f"{'par':12s}" + "".join(f"| {n:^28s}" for n in modelos))
-    por_modalidade = {n: {"quadra": [], "praia": []} for n in modelos}
-    for i, par in enumerate(pares):
-        trechos, mod = pd.read_csv(f"outputs/pares/{par}/trechos.csv"), par.split("_")[0]
-        celulas = []
-        for n, ps in modelos.items():
-            inicios = np.array([no_orcamento(trechos, p, mod, args.razao)[1]["inicios_preservados"] for p in ps[i]])
-            por_modalidade[n][mod].append(inicios)
-            celulas.append(f"AUC {np.mean([auc(p, ys[i]) for p in ps[i]]):.2f}  início {inicios.mean():4.0%} ±{inicios.std():.0%}")
-        print(f"{par:12s}" + "".join(f"| {c:^28s}" for c in celulas))
-    for mod in ("quadra", "praia"):
-        por_semente = [np.mean(v[mod], axis=0) for v in por_modalidade.values()]
-        print(f"{'média ' + mod:12s}" + "".join(f"| {m.mean():^20.0%} ±{m.std():<6.0%}" for m in por_semente))
+    modelos["ensemble"] = [[np.mean([pd.Series(m[i][s if len(m[i]) > 1 else 0]).rank(pct=True) for m in modelos.values()],
+                                    axis=0) for s in range(args.sementes)] for i in range(len(pares))]
+
+    for h in args.histerese:
+        print(f"\njogo de fora; histerese {h}; início preservado com vídeo final = {args.razao}x o gabarito "
+              f"(margem pré 4 s); {args.sementes} semente(s): média ± desvio")
+        print(f"{'par':12s}" + "".join(f"| {n:^28s}" for n in modelos))
+        por_modalidade = {n: {"quadra": [], "praia": []} for n in modelos}
+        for i, par in enumerate(pares):
+            trechos, mod = pd.read_csv(f"outputs/pares/{par}/trechos.csv"), par.split("_")[0]
+            celulas = []
+            for n, ps in modelos.items():
+                inicios = np.array([no_orcamento(trechos, p, mod, args.razao, h)[1]["inicios_preservados"] for p in ps[i]])
+                por_modalidade[n][mod].append(inicios)
+                celulas.append(f"AUC {np.mean([auc(p, ys[i]) for p in ps[i]]):.2f}  início {inicios.mean():4.0%} ±{inicios.std():.0%}")
+            print(f"{par:12s}" + "".join(f"| {c:^28s}" for c in celulas))
+        for mod in ("quadra", "praia"):
+            por_semente = [np.mean(v[mod], axis=0) for v in por_modalidade.values()]
+            print(f"{'média ' + mod:12s}" + "".join(f"| {m.mean():^20.0%} ±{m.std():<6.0%}" for m in por_semente))
 
 
 if __name__ == "__main__":

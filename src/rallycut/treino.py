@@ -44,11 +44,14 @@ def auc(p: np.ndarray, y: np.ndarray) -> float:
     return float((r[y == 1].sum() - n1 * (n1 + 1) / 2) / (n1 * (len(y) - n1)))
 
 
-def no_orcamento(trechos: pd.DataFrame, p: np.ndarray, modalidade: str, razao: float = 1.5):
+def no_orcamento(trechos: pd.DataFrame, p: np.ndarray, modalidade: str, razao: float = 1.5,
+                 histerese: float | None = None):
     """Limiar para o vídeo final ficar com `razao` x o tempo do gabarito (margem pré de 4 s).
 
     Compara modelos de calibração diferente pelo mesmo tamanho de saída. Devolve (limiar, métricas)."""
     cfg = {**carregar_config(modalidade)["deteccao"], "margem_pre_s": 4.0}
+    if histerese is not None:
+        cfg["histerese"] = histerese
     alvo = trechos["duracao_s"].sum() / 60 * razao
     candidatos = [(abs(r["mantido_min"] - alvo), lim, r)
                   for lim in np.arange(0.02, 0.8, 0.02)
