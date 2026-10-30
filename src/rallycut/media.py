@@ -86,12 +86,18 @@ def cmd_audio(video: Path, destino: Path, cfg: dict) -> list[str]:
             "-c:a", "pcm_s16le", str(destino)]
 
 
-def cmd_saida(video: Path, destino: Path, info: dict, cfg: dict, nvdec: bool) -> list[str]:
-    """Codificação final (altura, codec e qualidade da config)."""
+def cmd_saida(video: Path, destino: Path, info: dict, cfg: dict, nvdec: bool,
+              trecho: tuple[float, float] | None = None) -> list[str]:
+    """Codificação final (altura, codec e qualidade da config). Com `trecho` = (início, fim) em s do
+    vídeo, codifica só esse trecho (busca por tempo antes da entrada, exata porque recodifica)."""
     s = cfg["saida"]
     largura = largura_par(info, s["altura"])
     filtro = f"scale_cuda={largura}:{s['altura']}" if nvdec else f"scale={largura}:{s['altura']}"
     fps = ["-r", str(s["fps"])] if s.get("fps") else []
-    return [*_base(video, nvdec), "-vf", filtro, *fps,
+    base = _base(video, nvdec)
+    if trecho:
+        i = base.index("-i")
+        base[i:i] = ["-ss", f"{trecho[0]:.3f}", "-t", f"{trecho[1] - trecho[0]:.3f}"]
+    return [*base, "-vf", filtro, *fps,
             "-c:v", s["codec"], "-preset", s["preset"], "-rc", "vbr", "-cq", str(s["cq"]),
             "-b:v", "0", "-c:a", s["audio_codec"], "-b:a", s["audio_bitrate"], str(destino)]

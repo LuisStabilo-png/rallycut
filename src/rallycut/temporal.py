@@ -85,19 +85,22 @@ def prever(modelo: TCN, X: np.ndarray, device: str = "cuda") -> np.ndarray:
     return torch.sigmoid(modelo(x))[0].T.cpu().numpy()
 
 
-def salvar_tcn(modelos: list[TCN], colunas: list[str], caminho: Path):
+def salvar_tcn(modelos: list[TCN], colunas: list[str], pca: dict, caminho: Path):
+    """Guarda as sementes, a ordem das colunas e a PCA dos embeddings (`media`, `componentes`), que um
+    vídeo novo precisa para ser projetado como no treino."""
     torch.save({"colunas": colunas, "n_saidas": modelos[0].saida.out_channels,
-                "estados": [m.state_dict() for m in modelos]}, caminho)
+                "estados": [m.state_dict() for m in modelos],
+                "pca": {k: torch.from_numpy(np.asarray(v)) for k, v in pca.items()}}, caminho)
 
 
-def carregar_tcn(caminho: Path, device: str = "cuda") -> tuple[list[TCN], list[str]]:
+def carregar_tcn(caminho: Path, device: str = "cuda") -> tuple[list[TCN], list[str], dict]:
     d = torch.load(caminho, map_location=device)
     modelos = []
     for estado in d["estados"]:
         m = TCN(len(d["colunas"]), d["n_saidas"]).to(device)
         m.load_state_dict(estado)
         modelos.append(m.eval())
-    return modelos, d["colunas"]
+    return modelos, d["colunas"], {k: v.cpu().numpy() for k, v in d["pca"].items()}
 
 
 def prever_video(modelos: list[TCN], X: np.ndarray, device: str = "cuda") -> np.ndarray:
