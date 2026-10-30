@@ -11,6 +11,7 @@ from torch import nn
 from torch.nn import functional as F
 from torchvision.models import MobileNet_V3_Large_Weights, mobilenet_v3_large
 
+from rallycut.deteccao import com_contexto
 from rallycut.media import iterar_frames
 from rallycut.pessoas import PASTA_MODELOS, carregar_detector, detectar_pessoas
 
@@ -229,3 +230,21 @@ def features_bola(c: pd.DataFrame, n_janelas: int, fps: int = 8, janela_s: float
         "bola_vel": por(vel, lambda a: np.nanmedian(a, axis=1)),
         "bola_velmax": por(vel, lambda a: np.nanmax(a, axis=1)),
     })
+
+
+COLUNAS_BOLA = ["bola_n", "bola_score", "bola_frac", "bola_y", "bola_ymin", "bola_vel", "bola_velmax"]
+
+
+def com_bola(d: pd.DataFrame, saida_base: Path = Path("outputs/pares"), controle: int | None = None) -> pd.DataFrame:
+    """Acrescenta a cada par de `d` (janelas de 0,5 s) as features de bola e o contexto delas (5 s e 15 s).
+
+    `controle` (semente): desloca a bola de cada vídeo no tempo por um valor aleatório (>= 1/4 do vídeo),
+    mantendo suas estatísticas mas desalinhando-a do jogo; serve para provar que o ganho vem do sinal."""
+    rng = np.random.default_rng(controle)
+    partes = []
+    for par, g in d.groupby("par", sort=False):
+        f = features_bola(pd.read_csv(saida_base / par / "bola_candidatos.csv"), len(g))
+        if controle is not None:
+            f = pd.DataFrame(np.roll(f.to_numpy(), int(rng.integers(len(f) // 4, 3 * len(f) // 4)), axis=0), columns=f.columns)
+        partes.append(pd.concat([g.reset_index(drop=True), com_contexto(f, colunas=COLUNAS_BOLA)], axis=1))
+    return pd.concat(partes, ignore_index=True)

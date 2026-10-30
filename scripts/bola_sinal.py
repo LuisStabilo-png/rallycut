@@ -12,24 +12,11 @@ from pathlib import Path
 
 import pandas as pd
 
-from rallycut.bola import features_bola
+from rallycut.bola import com_bola
 from rallycut.config import carregar_config
-from rallycut.deteccao import com_contexto
 from rallycut.features import sufixo
 from rallycut.pares import listar_pares, preparar_par
 from rallycut.treino import auc, carregar, treinar_gbm
-
-BOLA = ["bola_n", "bola_score", "bola_frac", "bola_y", "bola_ymin", "bola_vel", "bola_velmax"]
-
-
-def juntar_bola(d: pd.DataFrame) -> pd.DataFrame:
-    """Acrescenta as features de bola (e o contexto de 5 s e 15 s) a cada par de `d`."""
-    partes = []
-    for par, g in d.groupby("par", sort=False):
-        c = pd.read_csv(Path("outputs/pares") / par / "bola_candidatos.csv")
-        f = com_contexto(features_bola(c, len(g)), colunas=BOLA)
-        partes.append(pd.concat([g.reset_index(drop=True), f], axis=1))
-    return pd.concat(partes, ignore_index=True)
 
 
 def principal():
@@ -41,7 +28,7 @@ def principal():
     altura = args.altura or carregar_config("quadra")["features"]["altura"]
     pastas = [preparar_par(p, Path("outputs/pares"), altura=altura) for p in listar_pares()]
     d, _ = carregar(pastas, args.embeddings, sufixo(altura))
-    d = juntar_bola(d)
+    d = com_bola(d)
     todas = [c for c in d.columns if c not in ("t", "rotulo", "par", "bloco")]
     so_bola = [c for c in todas if c.startswith("bola_")]
     atuais = [c for c in todas if c not in so_bola]

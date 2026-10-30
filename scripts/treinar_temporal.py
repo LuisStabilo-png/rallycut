@@ -16,6 +16,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+from rallycut.bola import com_bola
 from rallycut.config import carregar_config
 from rallycut.features import sufixo
 from rallycut.pares import listar_pares, preparar_par
@@ -31,6 +32,8 @@ def principal():
     ap.add_argument("--modos", nargs="+", default=["global", "video"], choices=["global", "video"])
     ap.add_argument("--razao", type=float, default=1.5)
     ap.add_argument("--sementes", type=int, default=1, help="repetições do treino do TCN")
+    ap.add_argument("--bola", choices=["nao", "sim", "controle"], default="nao",
+                    help="features de bola (outputs/pares/<par>/bola_candidatos.csv); controle = bola deslocada no tempo")
     ap.add_argument("--histerese", type=float, nargs="+", default=[1.0],
                     help="fatores de histerese da segmentação (1 = sem)")
     args = ap.parse_args()
@@ -38,6 +41,8 @@ def principal():
     altura = args.altura or carregar_config("quadra")["features"]["altura"]
     pastas = [preparar_par(p, Path("outputs/pares"), altura=altura) for p in listar_pares()]
     d, _ = carregar(pastas, args.embeddings, sufixo(altura))
+    if args.bola != "nao":
+        d = com_bola(d, controle=0 if args.bola == "controle" else None)
     gbm_cols = [c for c in d.columns if c not in ("t", "rotulo", "par", "bloco")]
     pares, _, Xs, ys2 = dados_tcn(d)
     ys = [y[:, 0] for y in ys2]
