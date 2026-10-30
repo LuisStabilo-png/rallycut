@@ -9,13 +9,28 @@ morto é aceitável; cortar o saque não é.
 
 ## Status
 
-| Fase | Descrição | Situação |
-|------|-----------|----------|
-| 0 | Ambiente e baseline de desempenho | em andamento |
-| 1 | Dataset a partir dos vídeos já editados | pendente |
-| 2 | Detector v1 (regras calibradas) | pendente |
-| 3 | App Gradio com revisão | pendente |
-| 4 | Classificador v2 | pendente |
+| Etapa | Situação |
+|-------|----------|
+| Dataset (pares bruto/editado alinhados automaticamente) | 9 pares: 4 de quadra, 5 de praia |
+| Detector de rallies (TCN + features de jogadores, movimento, áudio e bola) | pronto |
+| `scripts/cortar.py` (bruto -> rallies.csv -> vídeo cortado) | pronto |
+| App Gradio de revisão | pendente |
+
+Medido com jogo de fora (o modelo não viu o jogo): ~97% dos inícios de rally preservados
+(pior jogo 94-95%), com o vídeo final em ~1,8x (quadra) e ~2,3x (praia) o tempo ideal.
+
+## Como usar
+
+```bash
+uv run python scripts/cortar.py VIDEO_BRUTO.mp4 --modalidade quadra   # ou praia
+```
+
+Gera em `outputs/cortes/<nome>/`: `rallies.csv` (início, fim e confiança de cada rally) e
+`<nome>_cortado.mp4`. Para revisar, edite o CSV e rode de novo com `--cortar-de rallies.csv`
+(o que é caro fica em cache). Leva menos que a duração do vídeo numa RTX 3050.
+Modelos: `outputs/modelos/tcn_bola.pt` (`scripts/treinar_tcn_final.py`) e
+`outputs/bola/mapa_todos.pt` (detector de bola). Limiares em `configs/default.yaml`
+(recalibrar com `scripts/calibrar_limiar.py` ao retreinar).
 
 ## Requisitos
 
