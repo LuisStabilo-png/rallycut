@@ -17,10 +17,10 @@ import numpy as np
 import pandas as pd
 
 from rallycut.config import carregar_config
-from rallycut.features import rotular_inicios, sufixo
+from rallycut.features import sufixo
 from rallycut.pares import listar_pares, preparar_par
 from rallycut.temporal import padronizar, prever, treinar_tcn
-from rallycut.treino import auc, carregar, no_orcamento, treinar_gbm
+from rallycut.treino import auc, carregar, dados_tcn, no_orcamento, treinar_gbm
 
 
 def principal():
@@ -39,12 +39,8 @@ def principal():
     pastas = [preparar_par(p, Path("outputs/pares"), altura=altura) for p in listar_pares()]
     d, _ = carregar(pastas, args.embeddings, sufixo(altura))
     gbm_cols = [c for c in d.columns if c not in ("t", "rotulo", "par", "bloco")]
-    brutas = [c for c in gbm_cols if not c.endswith(("_mean10", "_mean30", "_std10", "_std30"))]
-    pares = list(d["par"].unique())
-    Xs = [d.loc[d["par"] == p, brutas].to_numpy(float) for p in pares]
-    ys = [d.loc[d["par"] == p, "rotulo"].to_numpy(float) for p in pares]
-    ys2 = [np.c_[y, rotular_inicios(d.loc[d["par"] == p, "t"].to_numpy(), pd.read_csv(f"outputs/pares/{p}/trechos.csv"))]
-           for p, y in zip(pares, ys)]
+    pares, _, Xs, ys2 = dados_tcn(d)
+    ys = [y[:, 0] for y in ys2]
 
     # modelos[nome][par] = previsões, uma por semente (o LightGBM é determinístico: uma só)
     modelos = {"lightgbm": []}
@@ -57,8 +53,9 @@ def principal():
         for i in range(len(pares)):
             treino = [j for j in range(len(pares)) if j != i]
             Z = padronizar(Xs, modo, treino)
-            prev = [prever(treinar_tcn([Z[j] for j in treino], [ys2[j] for j in treino], args.passos, semente=s), Z[i])
-                    for s in range(args.sementes)]
+            ms = [treinar_tcn([Z[j] for j in treino], [ys2[j] for j in treino], args.passos, semente=s)
+                  for s in range(args.sementes)]
+            prev = [prever(m, Z[i]) for m in ms]
             modelos[f"tcn-{modo}"].append([p[:, 0] for p in prev])
             modelos[f"tcn-{modo}+ini"].append([p.max(axis=1) for p in prev])
 

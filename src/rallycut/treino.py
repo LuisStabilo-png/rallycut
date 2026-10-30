@@ -8,7 +8,7 @@ import pandas as pd
 
 from rallycut.config import carregar_config
 from rallycut.deteccao import BASE, avaliar, com_contexto, segmentar
-from rallycut.features import JANELA_S
+from rallycut.features import JANELA_S, rotular_inicios
 
 BLOCO_S = 600
 PARAMS = {"objective": "binary", "learning_rate": 0.05, "num_leaves": 15, "min_data_in_leaf": 20,
@@ -31,6 +31,18 @@ def carregar(pastas: list[Path], k_emb: int, suf: str = "") -> tuple[pd.DataFram
         df["par"], df["eh_praia"] = p.name, int(p.name.startswith("praia"))
         df["bloco"] = (df["t"] // BLOCO_S).astype(int)
     return pd.concat([com_contexto(df, colunas=BASE + cols) for df in dfs], ignore_index=True), pca
+
+
+def dados_tcn(d: pd.DataFrame, saida_base: Path = Path("outputs/pares")):
+    """(pares, colunas, Xs, ys) para o TCN: features brutas (sem o contexto) e alvos (janelas, 2) =
+    rally e entorno do início, um array por par."""
+    colunas = [c for c in d.columns if c not in ("t", "rotulo", "par", "bloco")
+               and not c.endswith(("_mean10", "_mean30", "_std10", "_std30"))]
+    pares = list(d["par"].unique())
+    Xs = [d.loc[d["par"] == p, colunas].to_numpy(float) for p in pares]
+    ys = [np.c_[g["rotulo"], rotular_inicios(g["t"].to_numpy(), pd.read_csv(saida_base / p / "trechos.csv"))]
+          for p in pares for g in [d[d["par"] == p]]]
+    return pares, colunas, Xs, ys
 
 
 def treinar_gbm(X: pd.DataFrame, y: pd.Series) -> lgb.Booster:

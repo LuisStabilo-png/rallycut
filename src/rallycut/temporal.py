@@ -4,6 +4,8 @@ Com dilatações 1, 2, 4, 8 e 16 e kernel 5, cada janela enxerga ~±1 min ao red
 reconhecer o ritmo do jogo (saque, troca de bolas, parada) em vez de olhar uma janela isolada.
 """
 
+from pathlib import Path
+
 import numpy as np
 import torch
 from torch import nn
@@ -81,3 +83,25 @@ def prever(modelo: TCN, X: np.ndarray, device: str = "cuda") -> np.ndarray:
     """Probabilidades (janelas, saídas)."""
     x = torch.tensor(X, dtype=torch.float32, device=device).T[None]
     return torch.sigmoid(modelo(x))[0].T.cpu().numpy()
+
+
+def salvar_tcn(modelos: list[TCN], colunas: list[str], caminho: Path):
+    torch.save({"colunas": colunas, "n_saidas": modelos[0].saida.out_channels,
+                "estados": [m.state_dict() for m in modelos]}, caminho)
+
+
+def carregar_tcn(caminho: Path, device: str = "cuda") -> tuple[list[TCN], list[str]]:
+    d = torch.load(caminho, map_location=device)
+    modelos = []
+    for estado in d["estados"]:
+        m = TCN(len(d["colunas"]), d["n_saidas"]).to(device)
+        m.load_state_dict(estado)
+        modelos.append(m.eval())
+    return modelos, d["colunas"]
+
+
+def prever_video(modelos: list[TCN], X: np.ndarray, device: str = "cuda") -> np.ndarray:
+    """Probabilidade de rally por janela de um vídeo (features brutas, na ordem de `colunas`):
+    média das sementes do máximo entre as saídas de rally e de início."""
+    Z = padronizar([X], "video", [])[0]
+    return np.mean([prever(m, Z, device).max(axis=1) for m in modelos], axis=0)
