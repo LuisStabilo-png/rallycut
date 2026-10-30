@@ -68,9 +68,18 @@ def _jogadores(caixas: list) -> pd.DataFrame:
                                          "perto_med", "custo_hung", "frac_estavel"])
 
 
-def features_video(video, wav, duracao_s: float, detector, embedder, device: str = "cuda", lote: int = 16):
+def sufixo(altura: int) -> str:
+    """Sufixo dos arquivos de features por resolução (360 = nomes antigos, sem sufixo)."""
+    return "" if altura == 360 else f"_{altura}"
+
+
+def features_video(video, wav, duracao_s: float, detector, embedder, altura: int = 720,
+                   device: str = "cuda", lote: int = 16):
     """(DataFrame, embeddings): uma linha por janela (`t` = início em s, e as features) e a matriz
-    (janelas, 960) de embeddings visuais."""
+    (janelas, 960) de embeddings visuais.
+
+    Os frames são decodificados com `altura` px (jogadores pequenos pedem mais pixels); o embedding
+    continua calculado a 640x360, para comparar só o efeito da resolução da detecção."""
     n = int(duracao_s / JANELA_S)
     mov = np.full((n * POR_JANELA, 2), np.nan)
     caixas, fila = [np.zeros((0, 5))] * n, []
@@ -79,12 +88,13 @@ def features_video(video, wav, duracao_s: float, detector, embedder, device: str
     def detectar():
         frames = [f for _, f in fila]
         for (w, _), c, e in zip(fila, detectar_pessoas(detector, frames, device),
-                                embeddings(embedder, frames, device)):
+                                embeddings(embedder, [cv2.resize(f, (640, 360), interpolation=cv2.INTER_AREA)
+                                                      for f in frames], device)):
             caixas[w], emb[w] = c, e
         fila.clear()
 
     anterior = None
-    for i, frame in enumerate(iterar_frames(video, FPS, 640, 360)):
+    for i, frame in enumerate(iterar_frames(video, FPS, round(altura * 16 / 9 / 2) * 2, altura)):
         if i >= n * POR_JANELA:
             break
         cinza = cv2.cvtColor(cv2.resize(frame, (160, 90), interpolation=cv2.INTER_AREA),

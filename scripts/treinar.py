@@ -22,19 +22,19 @@ import pandas as pd
 
 from rallycut.config import carregar_config
 from rallycut.deteccao import BASE, avaliar, com_contexto, segmentar
-from rallycut.features import JANELA_S
+from rallycut.features import JANELA_S, sufixo
 from rallycut.pares import listar_pares, preparar_par
 
 BLOCO_S = 600
 
 
-def carregar(pastas: list[Path], k_emb: int) -> tuple[pd.DataFrame, dict]:
+def carregar(pastas: list[Path], k_emb: int, suf: str = "") -> tuple[pd.DataFrame, dict]:
     """Junta as janelas de todos os pares, com as `k_emb` componentes principais dos embeddings
     visuais (PCA ajustada em todos os pares) e o contexto temporal de cada feature."""
-    dfs = [pd.read_csv(p / "janelas.csv") for p in pastas]
+    dfs = [pd.read_csv(p / f"janelas{suf}.csv") for p in pastas]
     pca, cols = {}, []
     if k_emb:
-        embs = [np.load(p / "embeddings.npy").astype(np.float32) for p in pastas]
+        embs = [np.load(p / f"embeddings{suf}.npy").astype(np.float32) for p in pastas]
         E = np.vstack(embs)
         pca = {"media": E.mean(axis=0), "componentes": np.linalg.svd(E - E.mean(axis=0), full_matrices=False)[2][:k_emb]}
         cols = [f"emb{i}" for i in range(k_emb)]
@@ -74,11 +74,14 @@ def principal():
     ap.add_argument("--pares", type=Path, default=Path("data/pares"))
     ap.add_argument("--saida", type=Path, default=Path("outputs/modelos"))
     ap.add_argument("--embeddings", type=int, default=32, help="componentes dos embeddings visuais (0 = não usa)")
+    ap.add_argument("--altura", type=int, default=None,
+                    help="resolução da detecção de jogadores (padrão: config features.altura)")
     args = ap.parse_args()
 
     saida_base = Path("outputs/pares")
-    pastas = [preparar_par(p, saida_base) for p in listar_pares(args.pares)]
-    d, pca = carregar(pastas, args.embeddings)
+    altura = args.altura or carregar_config("quadra")["features"]["altura"]
+    pastas = [preparar_par(p, saida_base, altura=altura) for p in listar_pares(args.pares)]
+    d, pca = carregar(pastas, args.embeddings, sufixo(altura))
     colunas = [c for c in d.columns if c not in ("t", "rotulo", "par", "bloco")]
     print(f"{len(pastas)} pares, {len(d)} janelas ({d['rotulo'].mean():.0%} rally), {len(colunas)} features\n")
 

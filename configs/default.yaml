@@ -19,6 +19,8 @@ geral:
     audio_bitrate: 160k
   janela:
     tamanho_s: 0.5       # janela de features (s)
+  features:              # extração de features por janela (detecção de jogadores)
+    altura: 720          # resolução decodificada para detectar jogadores (largura 16:9); 360 = versão antiga
   alinhamento:           # alinhamento bruto <-> editado
     fps: 10              # amostragem dos frames comparados (memória cresce com fps²)
     largura: 128
