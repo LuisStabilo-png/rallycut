@@ -6,7 +6,8 @@ tamanho de saída: o início preservado quando o vídeo final tem `--razao` x o 
 Uso:
     uv run python scripts/treinar_temporal.py [--passos 1500] [--modos global video] [--sementes 3] [--histerese 1 0.5]
 
-O "ensemble" é a média dos percentis (por jogo) do LightGBM e dos TCNs, semente a semente.
+O TCN tem 2 saídas: rally e entorno do início (-3 s a +2 s). `tcn-X` usa só a de rally;
+`tcn-X+ini` usa o máximo das duas, o que liga as janelas ao redor do saque previsto.
 """
 
 import argparse
@@ -16,7 +17,7 @@ import numpy as np
 import pandas as pd
 
 from rallycut.config import carregar_config
-from rallycut.features import sufixo
+from rallycut.features import rotular_inicios, sufixo
 from rallycut.pares import listar_pares, preparar_par
 from rallycut.temporal import padronizar, prever, treinar_tcn
 from rallycut.treino import auc, carregar, no_orcamento, treinar_gbm
@@ -30,7 +31,7 @@ def principal():
     ap.add_argument("--modos", nargs="+", default=["global", "video"], choices=["global", "video"])
     ap.add_argument("--razao", type=float, default=1.5)
     ap.add_argument("--sementes", type=int, default=1, help="repetições do treino do TCN")
-    ap.add_argument("--histerese", type=float, nargs="+", default=[1.0, 0.5],
+    ap.add_argument("--histerese", type=float, nargs="+", default=[1.0],
                     help="fatores de histerese da segmentação (1 = sem)")
     args = ap.parse_args()
 
@@ -42,6 +43,8 @@ def principal():
     pares = list(d["par"].unique())
     Xs = [d.loc[d["par"] == p, brutas].to_numpy(float) for p in pares]
     ys = [d.loc[d["par"] == p, "rotulo"].to_numpy(float) for p in pares]
+    ys2 = [np.c_[y, rotular_inicios(d.loc[d["par"] == p, "t"].to_numpy(), pd.read_csv(f"outputs/pares/{p}/trechos.csv"))]
+           for p, y in zip(pares, ys)]
 
     # modelos[nome][par] = previsões, uma por semente (o LightGBM é determinístico: uma só)
     modelos = {"lightgbm": []}
@@ -50,16 +53,14 @@ def principal():
         m = treinar_gbm(d.loc[~fora, gbm_cols], d.loc[~fora, "rotulo"])
         modelos["lightgbm"].append([m.predict(d.loc[fora, gbm_cols])])
     for modo in args.modos:
-        modelos[f"tcn-{modo}"] = []
+        modelos[f"tcn-{modo}"], modelos[f"tcn-{modo}+ini"] = [], []
         for i in range(len(pares)):
             treino = [j for j in range(len(pares)) if j != i]
             Z = padronizar(Xs, modo, treino)
-            modelos[f"tcn-{modo}"].append([
-                prever(treinar_tcn([Z[j] for j in treino], [ys[j] for j in treino], args.passos, semente=s), Z[i])
-                for s in range(args.sementes)])
-
-    modelos["ensemble"] = [[np.mean([pd.Series(m[i][s if len(m[i]) > 1 else 0]).rank(pct=True) for m in modelos.values()],
-                                    axis=0) for s in range(args.sementes)] for i in range(len(pares))]
+            prev = [prever(treinar_tcn([Z[j] for j in treino], [ys2[j] for j in treino], args.passos, semente=s), Z[i])
+                    for s in range(args.sementes)]
+            modelos[f"tcn-{modo}"].append([p[:, 0] for p in prev])
+            modelos[f"tcn-{modo}+ini"].append([p.max(axis=1) for p in prev])
 
     for h in args.histerese:
         print(f"\njogo de fora; histerese {h}; início preservado com vídeo final = {args.razao}x o gabarito "

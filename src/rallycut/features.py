@@ -120,3 +120,9 @@ def rotular_janelas(t: np.ndarray, trechos: pd.DataFrame) -> np.ndarray:
     centro = t + JANELA_S / 2
     return np.any([(centro >= a) & (centro <= b) for a, b in zip(trechos["bruto_ini"], trechos["bruto_fim"])],
                   axis=0).astype(int)
+
+
+def rotular_inicios(t: np.ndarray, trechos: pd.DataFrame, antes_s: float = 3.0, depois_s: float = 2.0) -> np.ndarray:
+    """1 se o centro da janela está no entorno do início de algum rally (de `antes_s` antes a `depois_s` depois)."""
+    return rotular_janelas(t, pd.DataFrame({"bruto_ini": trechos["bruto_ini"] - antes_s,
+                                            "bruto_fim": trechos["bruto_ini"] + depois_s}))

@@ -21,14 +21,15 @@ class Bloco(nn.Module):
 
 
 class TCN(nn.Module):
-    def __init__(self, n_entradas: int, canais: int = 64, dilatacoes=(1, 2, 4, 8, 16), p: float = 0.3):
+    def __init__(self, n_entradas: int, n_saidas: int = 2, canais: int = 64, dilatacoes=(1, 2, 4, 8, 16),
+                 p: float = 0.3):
         super().__init__()
         self.entrada = nn.Conv1d(n_entradas, canais, 1)
         self.blocos = nn.Sequential(*[Bloco(canais, d, p) for d in dilatacoes])
-        self.saida = nn.Conv1d(canais, 1, 1)
+        self.saida = nn.Conv1d(canais, n_saidas, 1)
 
-    def forward(self, x):  # (lote, canais, tempo) -> logits (lote, tempo)
-        return self.saida(self.blocos(self.entrada(x))).squeeze(1)
+    def forward(self, x):  # (lote, canais, tempo) -> logits (lote, saídas, tempo)
+        return self.saida(self.blocos(self.entrada(x)))
 
 
 def padronizar(Xs: list[np.ndarray], modo: str, treino: list[int]) -> list[np.ndarray]:
@@ -44,12 +45,16 @@ def padronizar(Xs: list[np.ndarray], modo: str, treino: list[int]) -> list[np.nd
 
 
 def treinar_tcn(Xs: list[np.ndarray], ys: list[np.ndarray], passos: int = 1500, comp: int = 240,
-                lote: int = 16, device: str = "cuda", semente: int = 0) -> TCN:
+                lote: int = 16, device: str = "cuda", semente: int = 0, peso_inicio: float = 5.0) -> TCN:
     """Treina em trechos aleatórios (2 min) dos jogos, com aumento de dados que imita a troca de
-    local: ganho e deslocamento aleatórios por canal, ruído e canais zerados."""
+    local: ganho e deslocamento aleatórios por canal, ruído e canais zerados.
+
+    Cada `ys[i]` é (janelas, 2): coluna 0 = rally, coluna 1 = entorno do início (raro, por isso
+    `peso_inicio` nos positivos)."""
     torch.manual_seed(semente)
     rng = np.random.default_rng(semente)
-    modelo = TCN(Xs[0].shape[1]).to(device)
+    modelo = TCN(Xs[0].shape[1], ys[0].shape[1]).to(device)
+    pos_weight = torch.tensor([1.0, peso_inicio], device=device).view(-1, 1)
     otimizador = torch.optim.AdamW(modelo.parameters(), lr=1e-3, weight_decay=1e-2)
     pesos = np.array([len(x) for x in Xs], float)
     pesos /= pesos.sum()
@@ -63,8 +68,8 @@ def treinar_tcn(Xs: list[np.ndarray], ys: list[np.ndarray], passos: int = 1500, 
             xb.append(x * (rng.random(c) > 0.1))
             yb.append(ys[i][a:a + comp])
         x = torch.tensor(np.stack(xb), dtype=torch.float32, device=device).transpose(1, 2)
-        y = torch.tensor(np.stack(yb), dtype=torch.float32, device=device)
-        perda = nn.functional.binary_cross_entropy_with_logits(modelo(x), y)
+        y = torch.tensor(np.stack(yb), dtype=torch.float32, device=device).transpose(1, 2)
+        perda = nn.functional.binary_cross_entropy_with_logits(modelo(x), y, pos_weight=pos_weight)
         otimizador.zero_grad()
         perda.backward()
         otimizador.step()
@@ -73,5 +78,6 @@ def treinar_tcn(Xs: list[np.ndarray], ys: list[np.ndarray], passos: int = 1500, 
 
 @torch.no_grad()
 def prever(modelo: TCN, X: np.ndarray, device: str = "cuda") -> np.ndarray:
+    """Probabilidades (janelas, saídas)."""
     x = torch.tensor(X, dtype=torch.float32, device=device).T[None]
-    return torch.sigmoid(modelo(x))[0].cpu().numpy()
+    return torch.sigmoid(modelo(x))[0].T.cpu().numpy()
