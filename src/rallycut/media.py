@@ -86,6 +86,17 @@ def cmd_audio(video: Path, destino: Path, cfg: dict) -> list[str]:
             "-c:a", "pcm_s16le", str(destino)]
 
 
+def cmd_proxy_revisao(video: Path, destino: Path, info: dict, cfg: dict, nvdec: bool) -> list[str]:
+    """Proxy para assistir no app de revisão: baixa resolução, com áudio e um quadro-chave por segundo
+    (a busca por tempo no navegador fica rápida)."""
+    r = cfg["revisao"]
+    largura = largura_par(info, r["proxy_altura"])
+    filtro = (f"fps={r['proxy_fps']},scale_cuda={largura}:{r['proxy_altura']},hwdownload,format=nv12" if nvdec
+              else f"fps={r['proxy_fps']},scale={largura}:{r['proxy_altura']}")
+    return [*_base(video, nvdec), "-vf", filtro, "-c:v", "h264_nvenc", "-preset", "p4", "-cq", "32", "-g", str(r["proxy_fps"]),
+            "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "96k", "-movflags", "+faststart", str(destino)]
+
+
 def cmd_saida(video: Path, destino: Path, info: dict, cfg: dict, nvdec: bool,
               trecho: tuple[float, float] | None = None) -> list[str]:
     """Codificação final (altura, codec e qualidade da config). Com `trecho` = (início, fim) em s do

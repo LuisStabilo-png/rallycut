@@ -63,6 +63,8 @@ geral:
     piso_lacuna: 0.15    # pico (média de 3 s) mínimo da probabilidade para listar um vazio como rally perdido
     max_lacunas: 30
     duracao_min_s: 1.0   # menor rally aceito ao ajustar ou adicionar
+    proxy_altura: 480    # proxy para assistir no app
+    proxy_fps: 30
 
 quadra:
   deteccao:           # calibrado para o TCN com bola (scripts/calibrar_limiar.py, 9 pares, jogo de fora):

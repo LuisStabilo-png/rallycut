@@ -11,6 +11,7 @@ Uso:
 """
 
 import argparse
+import json
 from pathlib import Path
 
 import pandas as pd
@@ -32,6 +33,8 @@ def principal():
     args = ap.parse_args()
 
     saida = args.saida or Path("outputs/cortes") / args.video.stem
+    saida.mkdir(parents=True, exist_ok=True)
+    (saida / "fonte.json").write_text(json.dumps({"video": str(args.video.resolve()), "modalidade": args.modalidade}))
     if args.cortar_de:
         r = pd.read_csv(args.cortar_de)
     else:
