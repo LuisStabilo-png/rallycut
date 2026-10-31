@@ -57,6 +57,13 @@ geral:
     margem_pre_s: 1.5    # folga antes do início detectado (nunca perder o saque)
     margem_pos_s: 1.5    # folga depois do fim detectado
 
+  revisao:               # app de revisão (app/revisar.py)
+    contexto_antes_s: 8.0  # quanto do vídeo antes do início do rally o player mostra (vê o saque entrar)
+    contexto_depois_s: 3.0
+    piso_lacuna: 0.15    # pico (média de 3 s) mínimo da probabilidade para listar um vazio como rally perdido
+    max_lacunas: 30
+    duracao_min_s: 1.0   # menor rally aceito ao ajustar ou adicionar
+
 quadra:
   deteccao:           # calibrado para o TCN com bola (scripts/calibrar_limiar.py, 9 pares, jogo de fora):
     limiar: 0.40      # ~97% dos inícios (pior par 94%) com a saída em ~1,8x o gabarito
