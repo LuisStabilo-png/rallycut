@@ -14,7 +14,7 @@ morto é aceitável; cortar o saque não é.
 | Dataset (pares bruto/editado alinhados automaticamente) | 9 pares: 4 de quadra, 5 de praia |
 | Detector de rallies (TCN + features de jogadores, movimento, áudio e bola) | pronto |
 | `scripts/cortar.py` (bruto -> rallies.csv -> vídeo cortado) | pronto |
-| App Gradio de revisão | pendente |
+| App Gradio de revisão (`app/revisar.py`) | pronto |
 
 Medido com jogo de fora (o modelo não viu o jogo): ~97% dos inícios de rally preservados
 (pior jogo 94-95%), com o vídeo final em ~1,8x (quadra) e ~2,3x (praia) o tempo ideal.
@@ -28,6 +28,14 @@ uv run python scripts/cortar.py VIDEO_BRUTO.mp4 --modalidade quadra   # ou praia
 Gera em `outputs/cortes/<nome>/`: `rallies.csv` (início, fim e confiança de cada rally) e
 `<nome>_cortado.mp4`. Para revisar, edite o CSV e rode de novo com `--cortar-de rallies.csv`
 (o que é caro fica em cache). Leva menos que a duração do vídeo numa RTX 3050.
+### Revisão
+
+```bash
+uv run python app/revisar.py   # abre em http://127.0.0.1:7860
+```
+
+Escolha um corte de `outputs/cortes/`, clique em Carregar (na primeira vez cria um proxy 480p para assistir). A aba *Rallies* lista os rallies do menos ao mais confiante; a aba *Possíveis rallies perdidos* mostra os vazios onde o modelo ainda vê jogo. Cada ação grava `rallies_revisados.csv`. Dali: *Cortar o vídeo revisado*, ou *Exportar como dado de treino* (grava em `data/revisados/<nome>/`, entra no próximo treino; só libera com tudo revisado).
+
 Modelos: `outputs/modelos/tcn_bola.pt` (`scripts/treinar_tcn_final.py`) e
 `outputs/bola/mapa_todos.pt` (detector de bola). Limiares em `configs/default.yaml`
 (recalibrar com `scripts/calibrar_limiar.py` ao retreinar).

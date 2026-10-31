@@ -148,7 +148,8 @@ def exportar(nome: str):
     if destino.exists() or (Path("outputs/pares") / nome).exists():
         return f"Já existe um par com o nome {nome}. Escolha outro nome."
     d = S["cfg"]["deteccao"]
-    rv.exportar_treino(S["df"], destino, S["bruto"], S["duracao"], d["margem_pre_s"], d["margem_pos_s"])
+    rv.exportar_treino(S["df"], destino, S["bruto"], S["duracao"], d["margem_pre_s"], d["margem_pos_s"],
+                       p=S["p"], limiar_nucleo=S["cfg"]["revisao"]["limiar_nucleo"])
     return f"Exportado em {destino}. Entra no próximo treino (listar_pares)."
 
 

@@ -16,7 +16,7 @@ import numpy as np
 import torch
 
 from rallycut.bola import MapaBola, carregar_mapa, carregar_rotulos, extrair_candidatos, treinar_mapa
-from rallycut.pares import listar_pares
+from rallycut.pares import bruto_do_par, listar_pares
 
 SAIDA = Path("outputs/bola")
 
@@ -47,7 +47,7 @@ def principal():
             continue
         modelo = detector(pasta.name if pasta.name in set(d["par"]) else "todos", d, imgs, centros, args.passos)
         t0 = time.time()
-        c = extrair_candidatos(next(pasta.glob("*bruto*")), modelo, args.fps)
+        c = extrair_candidatos(bruto_do_par(pasta), modelo, args.fps)
         c.round(2).to_csv(saida, index=False)
         print(f"{pasta.name}: {len(c)} candidatos, {(time.time() - t0) / 60:.1f} min", flush=True)
 

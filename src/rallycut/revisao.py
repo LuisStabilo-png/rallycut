@@ -10,6 +10,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+from rallycut.deteccao import segmentar
 from rallycut.features import JANELA_S
 
 COLUNAS = ["rally", "ini_s", "fim_s", "duracao_s", "confianca", "status"]
@@ -128,15 +129,30 @@ def pendencias(df: pd.DataFrame, lac: pd.DataFrame, marcas: list[float]) -> tupl
     return int((df["status"] == "pendente").sum()), int(sum(not lacuna_revisada(t, marcas) for t in lac["t_pico"]))
 
 
+def _nucleos(p: np.ndarray, ini: float, fim: float, limiar: float, duracao_video: float) -> list[tuple[float, float]]:
+    """Partes de [ini, fim] onde o modelo tem muita certeza de rally (limiar alto, vazios curtos unidos)."""
+    cfg = {"limiar": limiar, "suavizar_s": 3.0, "uniao_gap_s": 3.0, "duracao_min_s": 1.0, "margem_pre_s": 0.0, "margem_pos_s": 0.0}
+    return [(max(a, ini), min(b, fim)) for a, b in segmentar(p, cfg, duracao_video) if a < fim and b > ini]
+
+
 def exportar_treino(df: pd.DataFrame, destino: Path, bruto: Path, duracao_video: float,
-                    margem_pre_s: float, margem_pos_s: float):
+                    margem_pre_s: float, margem_pos_s: float, p: np.ndarray | None = None, limiar_nucleo: float = 0.7):
     """Grava `trechos.csv`, `removidos.csv` e `bruto.txt` (formato do gabarito) em `destino`.
 
-    Os rallies aceitos sem mudança perdem as margens que o detector acrescentou; os ajustados e adicionados
-    ficam como você os deixou."""
+    Ajustados e adicionados ficam como você os deixou. Um rally aceito sem mudança só foi confirmado como
+    rally: o vídeo cortado traz tempo morto junto (as margens e o limiar baixo do detector), então, com as
+    probabilidades `p`, ele vira o núcleo onde o modelo tem muita certeza (limiar `limiar_nucleo`); sem `p`,
+    perde só as margens."""
     linhas, acum = [], 0.0
+    trechos = []
     for r in ativos(df).itertuples():
-        ini, fim = (r.ini_s + margem_pre_s, r.fim_s - margem_pos_s) if r.status == "aceito" else (r.ini_s, r.fim_s)
+        if r.status != "aceito":
+            trechos.append((r.ini_s, r.fim_s))
+        elif p is not None and (nucleos := _nucleos(p, r.ini_s, r.fim_s, limiar_nucleo, duracao_video)):
+            trechos += nucleos
+        else:
+            trechos.append((r.ini_s + margem_pre_s, r.fim_s - margem_pos_s))
+    for ini, fim in trechos:
         if fim - ini <= 0:
             continue
         linhas.append({"rally": len(linhas) + 1, "editado_ini": round(acum, 3), "editado_fim": round(acum + fim - ini, 3),

@@ -4,12 +4,14 @@ Por par: quantos inícios o detector perde (rally inteiro ausente x rally que co
 dos ausentes aparecem entre os N primeiros candidatos do caçador de lacunas, para vários pisos.
 Também mostra o esforço: itens a conferir (rallies + lacunas suspeitas) contra os rallies do gabarito.
 Com --corrigir, simula um revisor perfeito (usa o gabarito) e mede o início preservado depois.
+Com --exportar DIR --par PAR, grava o resultado dessa revisão como dado de treino em DIR/<PAR>_sim.
 
 Uso:
     uv run python scripts/revisao_simulada.py [--pisos 0.1 0.15 0.25] [--corrigir]
 """
 
 import argparse
+import tempfile
 from pathlib import Path
 
 import numpy as np
@@ -18,18 +20,21 @@ import pandas as pd
 from rallycut import revisao as rv
 from rallycut.config import carregar_config
 from rallycut.deteccao import avaliar
-from rallycut.features import JANELA_S
+from rallycut.features import JANELA_S, rotular_janelas
 from rallycut.inferencia import rallies
+from rallycut.pares import bruto_do_par
 
 
 def principal():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--pisos", type=float, nargs="+", default=[0.1, 0.15, 0.25])
     ap.add_argument("--corrigir", action="store_true")
+    ap.add_argument("--exportar", type=Path, default=None)
+    ap.add_argument("--par", default=None)
     args = ap.parse_args()
 
     probs = dict(np.load(Path("outputs/modelos/probs_logo.npz")))
-    resumo = []
+    resumo, concordancia = [], {}
     for par, p in probs.items():
         mod, duracao = par.split("_")[0], len(p) * JANELA_S
         gab = pd.read_csv(Path("outputs/pares") / par / "trechos.csv")
@@ -63,10 +68,29 @@ def principal():
                     else:
                         depois_ini = ativos[ativos["ini_s"] >= r.bruto_fim]["ini_s"].min()
                         novo = rv.adicionar(novo, ini, min(r.bruto_fim + 1.5, duracao if np.isnan(depois_ini) else depois_ini), duracao)
+            for k in novo.loc[novo["status"] == "pendente", "rally"]:
+                novo = rv.aceitar(novo, int(k))
+            d = carregar_config(mod)["deteccao"]
+            t = np.arange(len(p)) * JANELA_S
+            gab_rot = rotular_janelas(t, gab)
+            for nome, prob in (("sem núcleo", None), ("com núcleo", p)):
+                with tempfile.TemporaryDirectory() as tmp:
+                    rv.exportar_treino(novo, Path(tmp) / "x", Path("v.mp4"), duracao, d["margem_pre_s"], d["margem_pos_s"], p=prob)
+                    rot = rotular_janelas(t, pd.read_csv(Path(tmp) / "x" / "trechos.csv"))
+                concordancia.setdefault(nome, []).append((rot == gab_rot).mean())
             antes = avaliar(gab, det[["ini_s", "fim_s"]].to_numpy())
             depois = avaliar(gab, rv.ativos(novo)[["ini_s", "fim_s"]].to_numpy())
+            if args.exportar and par == args.par:
+                for k in novo.loc[novo["status"] == "pendente", "rally"]:
+                    novo = rv.aceitar(novo, int(k))
+                d = carregar_config(mod)["deteccao"]
+                rv.exportar_treino(novo, args.exportar / f"{par}_sim", bruto_do_par(Path("data/pares") / par), duracao,
+                                   d["margem_pre_s"], d["margem_pos_s"])
             print(f"{par}: início preservado {antes['inicios_preservados']:.0%} -> {depois['inicios_preservados']:.0%} | "
                   f"saída {antes['mantido_min']:.1f} -> {depois['mantido_min']:.1f} min (gabarito {gab['duracao_s'].sum() / 60:.1f})")
+    for nome, v in concordancia.items():
+        print(f"rótulos exportados da revisão {nome}: concordam com o gabarito do editado em {np.mean(v):.0%} das janelas (por par: "
+              + ", ".join(f"{x:.0%}" for x in v) + ")")
     r = pd.DataFrame(resumo)
     for piso, g in r.groupby("piso"):
         print(f"\n== piso {piso} ==\n{g.drop(columns='piso').to_string(index=False)}")

@@ -54,6 +54,16 @@ def test_salvar_e_abrir_voltam_igual(tmp_path):
     assert rv.abrir(tmp_path).equals(df) and not (tmp_path / "rallies_revisados.csv.tmp").exists()
 
 
+def test_exportar_treino_com_probabilidades_usa_o_nucleo_dos_aceitos(tmp_path):
+    p = np.zeros(int(DUR / JANELA_S))
+    p[int(15 / JANELA_S):int(25 / JANELA_S)] = 0.9  # núcleo do rally 1 (10-30 s); o resto do rally é tempo morto
+    p[int(10 / JANELA_S):int(15 / JANELA_S)] = 0.3
+    df = rv.aceitar(_df(), 1)
+    rv.exportar_treino(df[df["rally"] == 1], tmp_path / "x", tmp_path / "v.mp4", DUR, 4.0, 1.5, p=p)
+    t = pd.read_csv(tmp_path / "x" / "trechos.csv")
+    assert len(t) == 1 and 14 <= t["bruto_ini"][0] <= 16 and 24 <= t["bruto_fim"][0] <= 26
+
+
 def test_exportar_treino_tira_margens_dos_aceitos_e_mantem_os_ajustados(tmp_path):
     df = rv.aceitar(rv.ajustar(rv.aceitar(_df(), 1), 2, 48.0, 72.0, DUR), 3)
     rv.exportar_treino(df, tmp_path / "quadra_x", tmp_path / "v.mp4", DUR, margem_pre_s=4.0, margem_pos_s=1.5)

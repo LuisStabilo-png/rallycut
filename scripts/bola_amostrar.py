@@ -14,7 +14,7 @@ import numpy as np
 import pandas as pd
 
 from rallycut.media import extrair_frame
-from rallycut.pares import listar_pares
+from rallycut.pares import bruto_do_par, listar_pares
 
 SAIDA = Path("outputs/bola")
 
@@ -46,7 +46,7 @@ def principal():
     for pasta in listar_pares():
         if not pasta.name.startswith(args.modalidade):
             continue
-        bruto = next(pasta.glob("*bruto*"))
+        bruto = bruto_do_par(pasta)
         gab = Path("outputs/pares") / pasta.name
         for classe, csv in (("rally", "trechos.csv"), ("morto", "removidos.csv")):
             for t in sortear(pd.read_csv(gab / csv), args.n // 2, rng):
