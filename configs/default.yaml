@@ -69,8 +69,8 @@ geral:
 
 quadra:
   deteccao:           # calibrado para o TCN com bola (scripts/calibrar_limiar.py, 9 pares, jogo de fora):
-    limiar: 0.40      # ~97% dos inícios (pior par 94%) com a saída em ~1,8x o gabarito
-    margem_pre_s: 4.0
+    limiar: 0.40      # ~96% dos inícios (pior par 93%), folga mediana de ~5 s antes do saque, saída em ~1,6x o gabarito
+    margem_pre_s: 2.0
 
 praia:
   deteccao:           # idem: ~97% dos inícios (pior par 95%) com a saída em ~2,3x o gabarito
