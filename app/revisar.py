@@ -31,13 +31,23 @@ def _pastas() -> list[str]:
 
 
 def _player(t0: float, t1: float) -> str:
-    src = f"/gradio_api/file={S['proxy'].resolve().as_posix()}#t={max(t0, 0):.2f},{t1:.2f}"
-    return f'<video src="{src}" controls style="width:100%;max-height:480px;background:#000"></video>'
+    """Player preso ao trecho [t0, t1]: não toca nem deixa buscar nada fora dele."""
+    t0, t1 = max(t0, 0), min(t1, S["duracao"])
+    src = f"/gradio_api/file={S['proxy'].resolve().as_posix()}#t={t0:.2f},{t1:.2f}"
+    trava = (f"if(this.currentTime<{t0:.2f}-0.05)this.currentTime={t0:.2f};"
+             f"if(this.currentTime>{t1:.2f}){{this.pause();this.currentTime={t1:.2f};}}")
+    return (f'<div>Trecho {t0:.1f} s a {t1:.1f} s ({t1 - t0:.1f} s)</div>'
+            f'<video src="{src}" controls ontimeupdate="{trava}" onseeked="{trava}" '
+            f'style="width:100%;max-height:480px;background:#000"></video>')
 
 
-def _contexto(ini: float, fim: float) -> str:
-    r = S["cfg"]["revisao"]
-    return _player(ini - r["contexto_antes_s"], fim + r["contexto_depois_s"])
+def ver(ini, fim):
+    """Recarrega o player no trecho dos campos Início/Fim (se for válido)."""
+    try:
+        ini, fim = float(ini), float(fim)
+    except (TypeError, ValueError):
+        return gr.skip()
+    return _player(ini, fim) if "proxy" in S and ini < fim else gr.skip()
 
 
 def _lacunas() -> pd.DataFrame:
@@ -63,7 +73,7 @@ def _atualizar() -> tuple:
 def _selecionar(k: int):
     S["atual"] = k
     r = S["df"][S["df"]["rally"] == k].iloc[0]
-    return _contexto(r.ini_s, r.fim_s), r.ini_s, r.fim_s, f"Rally {k} ({r.status}, confiança {r.confianca})"
+    return _player(r.ini_s, r.fim_s), r.ini_s, r.fim_s, f"Rally {k} ({r.status}, confiança {r.confianca})"
 
 
 def carregar(nome: str, bruto: str, modalidade: str, progresso=gr.Progress()):
@@ -124,8 +134,7 @@ def selecionar_rally(evt: gr.SelectData):
 def selecionar_lacuna(evt: gr.SelectData):
     r = S["lac"].iloc[evt.index[0]]
     S["t_lacuna"] = float(r.t_pico)
-    c = S["cfg"]["revisao"]
-    return _player(r.t_pico - c["contexto_antes_s"] - 4, r.t_pico + c["contexto_depois_s"] + 8), max(r.t_pico - 6, r.ini_s), min(r.t_pico + 10, r.fim_s)
+    return _player(r.ini_s, r.fim_s), r.ini_s, r.fim_s
 
 
 def marcar_lacuna():
@@ -190,6 +199,9 @@ def interface() -> gr.Blocks:
         botao.click(carregar, [corte, bruto, modalidade], [*saidas, nome])
         tabela.select(selecionar_rally, None, [video, ini, fim, titulo])
         lacunas.select(selecionar_lacuna, None, [video, ini, fim])
+        for campo in (ini, fim):
+            campo.submit(ver, [ini, fim], video)
+            campo.blur(ver, [ini, fim], video)
         ok.click(aceitar_e_proximo, None, [*saidas, video, ini, fim, titulo])
         ajusta.click(ajustar, [ini, fim], saidas)
         tira.click(remover, None, saidas)

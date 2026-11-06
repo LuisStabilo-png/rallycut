@@ -58,8 +58,6 @@ geral:
     margem_pos_s: 1.5    # folga depois do fim detectado
 
   revisao:               # app de revisão (app/revisar.py)
-    contexto_antes_s: 8.0  # quanto do vídeo antes do início do rally o player mostra (vê o saque entrar)
-    contexto_depois_s: 3.0
     piso_lacuna: 0.15    # pico (média de 3 s) mínimo da probabilidade para listar um vazio como rally perdido
     max_lacunas: 30
     duracao_min_s: 1.0   # menor rally aceito ao ajustar ou adicionar
